@@ -11,6 +11,31 @@ Local processing, no account, no item limits, no subscription. GPL-3.0-only.
 
 Download the trial ZIP, quit the previous app, unzip, then drag Open Tangerine into Applications and choose Replace if updating. macOS may block this unnotarized trial; see the website for Apple's official per-app opening guidance. Never disable Gatekeeper globally. Check for Updates opens the website with your installed version; the website compares published releases and provides a manual download. No Apple Developer subscription is required for update checks or hosting.
 
+## See it in motion
+
+**Drag. Hold Shift. Drop.** Convert a selection of files together, with a separate output for each input.
+
+![Animated illustration of dragging four PNG files onto the JPEG conversion wheel](docs/assets/showcase/readme-workflow.gif)
+
+**Your notch. Your style.** Pure black by default, optional glass, and successful results retract automatically.
+
+![Animated illustration of the pure-black and glass notch styles](docs/assets/showcase/readme-notch.gif)
+
+**[Watch the 30-second launch video](https://sintaxerrorpvtltd.github.io/Open-Tangerine/assets/showcase/Open-Tangerine-Launch.mp4)** — click the preview below.
+
+[![Open Tangerine launch video: four files, one gesture](docs/assets/showcase/launch-poster.png)](https://sintaxerrorpvtltd.github.io/Open-Tangerine/assets/showcase/Open-Tangerine-Launch.mp4)
+
+<details>
+<summary>View still previews of the conversion wheel and notch styles</summary>
+
+![Conversion wheel with JPEG highlighted and a four-file selection](docs/assets/showcase/wheel.png)
+
+![Pure-black and glass notch designs side by side](docs/assets/showcase/notch-styles.png)
+
+</details>
+
+*These are illustrated workflows, not screen recordings or conversion-speed benchmarks. The glass effect is an illustration of the native material. macOS 26+ developer trial.*
+
 ## Install from source
 
 Requires **macOS 26 or later**, Xcode 26 / compatible Command Line Tools, and Git. The build script uses Apple's Swift compiler directly; no package manager or third-party Swift dependencies are required.
