@@ -188,12 +188,14 @@ final class JobRunner: ObservableObject {
     }
 
     func hoverResults(_ hovering: Bool) {
+        guard AppSettings.shared.progressStyle == .card else { return }
         resultsHovered = hovering
         if hovering { hideWorkItem?.cancel() } else { scheduleHide() }
     }
 
     private func scheduleHide() {
-        guard !resultsHovered, !jobs.isEmpty else { return }
+        guard !jobs.isEmpty else { return }
+        guard AppSettings.shared.progressStyle == .pill || !resultsHovered else { return }
         guard jobs.allSatisfy({ $0.status.isFinished }) else { return }
         guard !jobs.contains(where: { if case .failed = $0.status { return true }; return false }) else { return }
         hideWorkItem?.cancel()
@@ -204,7 +206,7 @@ final class JobRunner: ObservableObject {
             self.jobSubscriptions.removeAll()
         }
         hideWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (AppSettings.shared.progressStyle == .pill ? 2 : 8), execute: item)
     }
 
     func dismiss(_ job: Job) {

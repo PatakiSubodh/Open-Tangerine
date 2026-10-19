@@ -90,6 +90,10 @@ final class AppSettings: ObservableObject {
 
     private let defaults = UserDefaults.standard
 
+    @Published var excludedApplications: [String: String] {
+        didSet { defaults.set(excludedApplications, forKey: "excludedApplications") }
+    }
+
     @Published var compressionPreset: CompressionPreset {
         didSet { defaults.set(compressionPreset.rawValue, forKey: "compressionPreset") }
     }
@@ -137,6 +141,7 @@ final class AppSettings: ObservableObject {
     }
 
     private init() {
+        excludedApplications = defaults.dictionary(forKey: "excludedApplications") as? [String: String] ?? [:]
         compressionPreset = CompressionPreset(rawValue: defaults.string(forKey: "compressionPreset") ?? "") ?? .balanced
         compressionResizeLongEdge = defaults.integer(forKey: "compressionResizeLongEdge")
         outputLocation = OutputLocation(rawValue: defaults.string(forKey: "outputLocation") ?? "") ?? .besideOriginal

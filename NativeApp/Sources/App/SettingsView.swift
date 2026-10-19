@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general
@@ -183,6 +184,39 @@ struct SettingsView: View {
         } footer: {
             Text("Hold the modifier while dragging files in Finder.")
         }
+        Section("Excluded applications") {
+            Text("Drag shortcuts stay off when a drag starts in these apps. Add CorelDRAW or other design tools here. You can still use Convert Files from the menu bar.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(settings.excludedApplications.keys.sorted(), id: \.self) { identifier in
+                HStack {
+                    Text(settings.excludedApplications[identifier] ?? identifier)
+                    Spacer()
+                    Button("Remove", systemImage: "minus.circle") {
+                        settings.excludedApplications.removeValue(forKey: identifier)
+                    }.help("Enable drag shortcuts in this application")
+                }
+            }
+            Button("Add Application…", systemImage: "plus.circle", action: addExcludedApplication)
+        }
+    }
+
+    private func addExcludedApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "Disable drag shortcuts in applications"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            guard response == .OK else { return }
+            for url in panel.urls {
+                guard let bundle = Bundle(url: url), let identifier = bundle.bundleIdentifier else { continue }
+                settings.excludedApplications[identifier] =
+                    (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+                    ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+                    ?? url.deletingPathExtension().lastPathComponent
+            }
+        }
     }
 
     @ViewBuilder private var appearance: some View {
@@ -276,7 +310,7 @@ struct SettingsView: View {
                     .tracking(1.1).foregroundStyle(.secondary)
                 Divider().padding(.horizontal, 30)
                 VStack(spacing: 7) {
-                    Text("Syntax Error Private Limited").font(.system(size: 13, weight: .semibold))
+                    Text("Sintax Error Private Limited").font(.system(size: 13, weight: .semibold))
                     Text("Free to use. Open to make better.")
                         .font(.caption).foregroundStyle(.secondary)
                 }

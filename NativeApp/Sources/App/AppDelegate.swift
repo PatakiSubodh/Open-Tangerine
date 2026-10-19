@@ -60,6 +60,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Show Logs", action: #selector(showLogs), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Open Tangerine", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let symbols = ["Convert Files…": "arrow.triangle.2.circlepath", "Open Tool for Files…": "wrench.and.screwdriver",
+                       "File Actions…": "doc.on.doc", "Settings…": "gearshape", "About Open Tangerine": "info.circle",
+                       "Check for Updates on Website…": "arrow.clockwise", "Show Logs": "doc.text.magnifyingglass",
+                       "Quit Open Tangerine": "power"]
+        for entry in menu.items {
+            if let symbol = symbols[entry.title] {
+                entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: entry.title)
+            }
+        }
         item.menu = menu
         statusItem = item
     }

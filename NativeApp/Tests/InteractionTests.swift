@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 final class UpdateResponse: URLProtocol {
     static var body = ""
     static var status = 200
@@ -15,6 +16,34 @@ final class UpdateResponse: URLProtocol {
 }
 @main struct InteractionTests {
     @MainActor static func main() async throws {
+        precondition(!DragMonitor.acceptsDrag(hasFiles: false, types: [.string, NSPasteboard.PasteboardType("com.corel.vector")]), "Internal vector drags must not open the wheel")
+        precondition(DragMonitor.acceptsDrag(hasFiles: true, types: []))
+        precondition(DragMonitor.acceptsDrag(hasFiles: false, types: [.fileURL]))
+        let excluded = ["test.design.app": "Design app"]
+        precondition(DragMonitor.isExcluded("test.design.app", applications: excluded))
+        precondition(!DragMonitor.isExcluded("com.apple.finder", applications: excluded))
+        precondition(!DragMonitor.isExcluded(nil, applications: excluded))
+        for count in [3, 6, 10] {
+            let geometry = RadialGeometry(count: count)
+            for index in 0..<count {
+                let angles = geometry.angles(for: index)
+                let angle = (angles.start + angles.end) / 2
+                precondition(geometry.index(at: CGPoint(x: cos(angle) * geometry.labelRadius, y: sin(angle) * geometry.labelRadius)) == index)
+            }
+            precondition(geometry.index(at: .zero) == nil)
+        }
+        let settings = AppSettings.shared
+        let oldStyle = settings.progressStyle
+        settings.progressStyle = .pill
+        let runner = JobRunner(presentsHUD: false)
+        let completedJob = Job(title: "Test", detail: "test")
+        runner.enqueue(completedJob) { _ in [] }
+        await completedJob.task?.value
+        runner.hoverResults(true)
+        try await Task.sleep(nanoseconds: 2_300_000_000)
+        precondition(runner.jobs.isEmpty, "Completed notch must dismiss even when hovered")
+        settings.progressStyle = oldStyle
+        print("PASS vector drag rejection, app exclusions, radial hit regions and two-second notch dismissal")
         precondition(AppVersion("0.1.10")! > AppVersion("0.1.9")!)
         precondition(AppVersion("v1.0.0")! == AppVersion("1.0.0")!)
         precondition(AppVersion("1.2.3-beta") == nil)

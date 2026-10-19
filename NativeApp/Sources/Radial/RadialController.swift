@@ -54,6 +54,11 @@ final class RadialController: DragMonitorDelegate {
             advanced = option
             reloadItems()
         }
+        // AppKit can delay destination updates while the source app owns the drag.
+        // The monitor already polls at 60 Hz; use its screen position for immediate hover.
+        if let panel {
+            panel.radialView.updateHighlight(forWindowPoint: panel.convertPoint(fromScreen: point))
+        }
     }
 
     func dragMonitor(_ monitor: DragMonitor, didUpdateDraggedURLs urls: [URL]) {

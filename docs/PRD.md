@@ -1,6 +1,6 @@
 # Open Tangerine — Product Requirements and Research
 
-Version 0.1 • 18 October 2026 • Owner: Syntax Error Private Limited (intended; title and contribution agreements to verify)
+Version 0.1 • 18 October 2026 • Owner: Sintax Error Private Limited (intended; title and contribution agreements to verify)
 
 Status: development proposal, not a production readiness or legal opinion. Working name. Independent from Tangerine for Mac. Final owner instruction permits commercial sale and prioritizes genuine open source. Selected license: GPL-3.0-only. Earlier no-sale and source-available proposals are superseded.
 
@@ -8,7 +8,7 @@ Evidence key: **Certain** = directly documented by the linked source or observed
 
 ## 1. Product decision
 
-Build a native macOS file utility: select or drag a file, choose a relevant operation, obtain a new result locally. No accounts, usage allowance, mandatory cloud connection or conversion billing. Optional future cloud AI uses the user's own provider account, with direct requests and explicit disclosure. Personal files do not pass through Syntax Error infrastructure.
+Build a native macOS file utility: select or drag a file, choose a relevant operation, obtain a new result locally. No accounts, usage allowance, mandatory cloud connection or conversion billing. Optional future cloud AI uses the user's own provider account, with direct requests and explicit disclosure. Personal files do not pass through Sintax Error infrastructure.
 
 **Likely:** SwiftUI plus AppKit and Apple frameworks best fit a lightweight Mac-only first release. Start with narrow verified format support; add independently tested engines. Do not promise “any file to any format.” A file extension is not a codec, and a supported input does not imply every output is meaningful.
 
@@ -149,7 +149,7 @@ SR9. Protect release credentials, use reviewed CI changes and signed/notarized d
 
 **Likely:** No AI is needed for core conversion. Vision can support local recognition/foreground masking on supported macOS versions. Local model features may require OS capabilities or model downloads, but not necessarily paid APIs. [S4]
 
-Future cloud AI is separately disabled by default: the user selects provider and model, stores their key in macOS Keychain, sees what data leaves the device, and confirms the request. Send directly to the provider. Never proxy keys or files through a Syntax Error service. Provider charges, retention and training policies must be explained per integration, not generalized. No cloud fallback without permission. User-controlled endpoints require a clear warning about credential destination.
+Future cloud AI is separately disabled by default: the user selects provider and model, stores their key in macOS Keychain, sees what data leaves the device, and confirms the request. Send directly to the provider. Never proxy keys or files through a Sintax Error service. Provider charges, retention and training policies must be explained per integration, not generalized. No cloud fallback without permission. User-controlled endpoints require a clear warning about credential destination.
 
 Free use does not mean zero operating cost for the maintainer: signing/distribution, CI, support and security maintenance remain. No current price estimate is asserted. Donations can be explored but must not silently introduce a use quota.
 
@@ -159,7 +159,7 @@ Free use does not mean zero operating cost for the maintainer: signing/distribut
 
 **Selected policy: GPL-3.0-only.** People may use, inspect, modify, redistribute and sell the software. Distributing covered modified versions requires GPL licensing and corresponding source under the applicable license provisions. It does not require publishing every private change or contributing changes back to our repository. GPL alone does not impose AGPL's network-service source requirement. Users can sell ordinary converted files. The unmodified license text is included in LICENSE; no no-sale clause is added.
 
-**Certain:** A contributor license grant and copyright assignment are different. [L6] Syntax Error retains rights in its own original material; contributors keep ownership of their contributions unless they sign an assignment. GPL contributions provide the project reuse rights without requiring transfer. Third-party engines remain their owners' property. A company copyright notice alone does not prove chain of title. Confirm employment/contractor rights and jurisdiction-specific treatment of AI-assisted work before making exclusive ownership claims. A valid GPL grant cannot simply be withdrawn from compliant existing recipients. [L3]
+**Certain:** A contributor license grant and copyright assignment are different. [L6] Sintax Error retains rights in its own original material; contributors keep ownership of their contributions unless they sign an assignment. GPL contributions provide the project reuse rights without requiring transfer. Third-party engines remain their owners' property. A company copyright notice alone does not prove chain of title. Confirm employment/contractor rights and jurisdiction-specific treatment of AI-assisted work before making exclusive ownership claims. A valid GPL grant cannot simply be withdrawn from compliant existing recipients. [L3]
 
 **Likely:** GPLv3 is a closer match than MIT to the owner's revised desire for community access: both permit sale, but GPL protects recipients' source and modification rights for distributed covered derivatives. It is not a mechanism to force contributions into our repository.
 
