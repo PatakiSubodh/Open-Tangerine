@@ -23,7 +23,7 @@
       }
       document.getElementById('download-rows').append(row);
     }
-    document.getElementById('download-total').textContent = `${total} release ZIP download requests`;
+    document.getElementById('download-total').textContent = `${total} release package download requests`;
     document.getElementById('repo-counts').textContent = `${repo.stargazers_count} stars · ${repo.forks_count} forks · ${repo.open_issues_count} open issues and pull requests combined`;
     document.getElementById('stats-status').textContent = `Checked ${new Date().toLocaleString()}. Refresh this page to check again.`;
   } catch {
