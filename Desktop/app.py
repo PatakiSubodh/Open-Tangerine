@@ -128,6 +128,10 @@ class Window(QMainWindow):
         else:event.accept()
 
 def main():
+    if os.name=='nt' and getattr(sys,'frozen',False):
+        import ctypes
+        handle=ctypes.windll.kernel32.GetConsoleWindow()
+        if handle: ctypes.windll.user32.ShowWindow(handle,0)
     app=QApplication(sys.argv);app.setStyle('Fusion');app.setStyleSheet('QWidget{background:#171717;color:#f5f3ed;font-size:13px} QPushButton,QComboBox,QSpinBox{padding:8px;border:1px solid #666;border-radius:6px} QPushButton:disabled{color:#888} QListWidget{background:#222;border:2px dashed #777;border-radius:10px;padding:8px} QProgressBar{border:1px solid #666;border-radius:4px;text-align:center} QProgressBar::chunk{background:#ff610a}')
     window=Window();window.show()
     if '--smoke-test' in sys.argv:QTimer.singleShot(400,app.quit)

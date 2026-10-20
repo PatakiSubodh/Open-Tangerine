@@ -7,7 +7,11 @@ dest=r/'dist/OpenTangerine';lic=dest/'licenses';lic.mkdir(exist_ok=True)
 shutil.copyfile(r.parent/'LICENSE',lic/'Open-Tangerine-GPL-3.0.txt')
 shutil.copyfile(r/'README.md',dest/'START-HERE.md')
 # Ship the corresponding application source next to the portable executable.
-src=dest/'source';src.mkdir(exist_ok=True)
+src=dest/'source/Desktop';src.mkdir(parents=True,exist_ok=True)
+shutil.copyfile(r.parent/'LICENSE',src.parent/'LICENSE')
+shutil.copyfile(r/'README.md',src/'README.md')
+shutil.copyfile(r/'RELEASE.md',src/'RELEASE.md')
+shutil.copytree(r/'tests',src/'tests',ignore=shutil.ignore_patterns('__pycache__'))
 for p in r.glob('*.py'):shutil.copyfile(p,src/p.name)
 shutil.copyfile(r/'requirements.txt',src/'requirements.txt');shutil.copyfile(r/'icon.png',src/'icon.png')
 versions={}
