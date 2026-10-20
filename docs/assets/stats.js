@@ -15,7 +15,7 @@
     }
     let total = 0;
     for (const release of releases) {
-      const count = release.assets.filter(a => /^Open-Tangerine-.*-macOS\.zip$/.test(a.name)).reduce((sum,a) => sum + a.download_count, 0);
+      const count = release.assets.filter(a => /^Open-Tangerine-.*-(?:macOS\.zip|Windows-x64\.zip|Linux-x64\.tar\.gz)$/.test(a.name)).reduce((sum,a) => sum + a.download_count, 0);
       total += count;
       const row = document.createElement('tr');
       for (const value of [release.tag_name, count]) {

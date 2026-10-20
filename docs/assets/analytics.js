@@ -70,7 +70,7 @@
     if (!anchor) return;
     const url = new URL(anchor.href, location.href);
     if (url.origin !== 'https://github.com' || !/^\/sintaxerrorpvtltd\/Open-Tangerine(?:\/|$)/.test(url.pathname)) return;
-    if (/^\/sintaxerrorpvtltd\/Open-Tangerine\/releases\/download\/[^/]+\/[^/]+\.zip$/.test(url.pathname)) {
+    if (/^\/sintaxerrorpvtltd\/Open-Tangerine\/releases\/download\/[^/]+\/[^/]+\.(?:zip|tar\.gz)$/.test(url.pathname)) {
       capture('ot_download_click', {release: url.pathname.split('/')[5]});
     } else if (url.pathname.includes('/releases')) capture('ot_releases_click');
     else capture('ot_repository_click');

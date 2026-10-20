@@ -48,3 +48,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+
+## Windows/Linux desktop edition
+
+The independently authored Python/Qt desktop edition uses Pillow (HPND), pypdf (BSD-3-Clause), PySide6/Shiboken and Qt (LGPLv3/GPLv3 options), Python (PSF) and PyInstaller (GPL with bootloader distribution exception). Exact pins are in `Desktop/requirements.txt`; portable builds include dependency versions and license texts under `licenses/`, and the corresponding application source under `source/`. Qt remains dynamically linked. Optional FFmpeg is installed and selected by the user and is not redistributed. Its build-specific licenses apply.

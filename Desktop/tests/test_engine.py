@@ -51,7 +51,7 @@ class ConversionTests(unittest.TestCase):
         p=self.root/'cue.vtt';p.write_text('WEBVTT\n\n00:00:01.000 --> 00:00:02.000 align:start\nhi')
         with self.assertRaises(ConversionError):convert(self.job('VTT → SRT',[p]))
     def test_hash(self):
-        p=Path(convert(self.job('SHA-256'))[0]);self.assertTrue(p.read_text().startswith(hashlib.sha256(self.src.read_bytes()).hexdigest()))
+        p=Path(convert(self.job('SHA-256'))[0]);self.assertTrue(p.read_text(encoding='utf8').startswith(hashlib.sha256(self.src.read_bytes()).hexdigest()))
     def test_corrupt_image(self):
         self.src.write_text('not an image')
         with self.assertRaises(Exception):convert(self.job('JPEG'))
@@ -104,4 +104,19 @@ class ConversionTests(unittest.TestCase):
         p=self.root/'sample.wav'
         with wave.open(str(p),'wb') as w:w.setnchannels(1);w.setsampwidth(2);w.setframerate(8000);w.writeframes(b'\0\0'*8000)
         out=run_job(self.job('FLAC',[p],ffmpeg=ff));self.assertEqual(Path(out[0]).read_bytes()[:4],b'fLaC')
+    def test_all_media_outputs(self):
+        ff=shutil.which('ffmpeg') or ('/opt/homebrew/bin/ffmpeg' if Path('/opt/homebrew/bin/ffmpeg').exists() else None)
+        if not ff:self.skipTest('FFmpeg not installed')
+        p=self.root/'video.mp4'
+        subprocess.run([ff,'-nostdin','-v','error','-f','lavfi','-i','color=c=orange:s=64x64:r=12','-f','lavfi','-i','sine=frequency=440:sample_rate=24000','-t','0.5','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(p)],check=True)
+        for target in ('MP4','WEBM','MP3','WAV','FLAC','OGG'):
+            with self.subTest(target=target):
+                output=run_job(self.job(target,[p],ffmpeg=ff))[0]
+                subprocess.run([ff,'-nostdin','-v','error','-xerror','-i',output,'-f','null','-'],check=True)
+    def test_animated_image_rejected(self):
+        p=self.root/'animated.webp'
+        a=Image.new('RGB',(8,8),'red');b=Image.new('RGB',(8,8),'blue');a.save(p,save_all=True,append_images=[b],duration=100,loop=0)
+        with self.assertRaisesRegex(ConversionError,'Animated'):convert(self.job('JPEG',[p]))
+    def test_batch_limit(self):
+        with self.assertRaises(ConversionError):convert(self.job('Merge PDFs',[self.src]*101))
 if __name__=='__main__':unittest.main()

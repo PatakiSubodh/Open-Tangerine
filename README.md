@@ -1,9 +1,25 @@
 # Open Tangerine
 
-A native macOS file converter and toolbox by **Sintax Error Private Limited**.
-Local processing, no account, no item limits, no subscription. GPL-3.0-only.
+A local file converter and toolbox for **macOS**, with an early **Windows/Linux desktop edition**, by **Sintax Error Private Limited**.
+Local processing, no account, no subscription. GPL-3.0-only. Safety limits apply.
 
-**Status: 0.1.9 developer trial — ad-hoc signed, not Apple-notarized.** This is an independent project, not affiliated with Tangerine. It builds on [Satsuma](https://github.com/plyght/satsuma), with its MIT attribution preserved. It is not yet a complete replacement for Tangerine. See [limitations](#limitations).
+**Mac status: 0.1.9 developer trial — ad-hoc signed, not Apple-notarized.** This is an independent project, not affiliated with Tangerine. It builds on [Satsuma](https://github.com/plyght/satsuma), with its MIT attribution preserved. It is not yet a complete replacement for Tangerine. See [limitations](#limitations).
+
+## Windows and Linux desktop edition
+
+The new **0.2.0 early desktop trial** is a separate implementation with a smaller feature set. [Download status and installation](https://sintaxerrorpvtltd.github.io/Open-Tangerine/#desktop) · [Desktop source and guide](Desktop/README.md) · [Windows/Linux build checks](https://github.com/sintaxerrorpvtltd/Open-Tangerine/actions/workflows/desktop.yml).
+
+| Platform | Interface | Availability / requirements |
+|---|---|---|
+| macOS | Native menu bar, global drag wheel and notch | v0.1.9; macOS 26+, Apple silicon |
+| Windows | Batch file-drop window and progress panel | 0.2.0 early trial; Windows 10/11 x64; unsigned portable ZIP |
+| Linux | Batch file-drop window and progress panel | 0.2.0 early trial; x64 Ubuntu 24.04 / glibc 2.39+; portable tar.gz |
+
+Desktop packages are published only after both CI jobs pass conversion tests and packaged startup/conversion checks. If the download page does not show a package yet, verification is still pending or the release could not be checked.
+
+Windows/Linux include image conversion, resize/rotate, image-to-PDF, PDF merge/split/text extraction, simple SRT/VTT, SHA-256 and optional FFmpeg media conversion. **No global Shift wheel, physical notch, HEIC/SVG, Office conversion, OCR or full Mac editor parity in this edition.** Drop files into its window. Each failed file is reported independently. Originals and existing outputs are preserved. Workers have limits but are not an OS security sandbox; use trusted files. [Detailed limits](Desktop/README.md#limits-and-safety).
+
+The illustrations below demonstrate the **Mac app**. The remaining Mac-specific sections describe its own capabilities.
 
 ## Download for Mac
 

@@ -9,3 +9,7 @@ Conversion staging never deletes an existing destination. Native image input has
 Known release gates: sandboxed workers, hard CPU/memory/time/output limits, metadata and redaction verification, SVG external-resource analysis, archive traversal/link/bomb tests, concurrency-safe publication across every tool, malicious parser corpus, cancellation/process cleanup and code signing/notarization. File extensions are not a trust boundary.
 
 To report a vulnerability, use GitHub private vulnerability reporting if enabled; otherwise open a non-sensitive issue asking for a private contact. Do not post private files, secrets, or a working exploit publicly. Do not claim a security audit based on the current regression tests.
+
+## Windows/Linux desktop edition
+
+`Desktop/` has disposable conversion workers, parent deadlines and cancellation, bounded worker diagnostics, explicit FFmpeg argument arrays and network protocol exclusion, input size/pixel/page limits, and exclusive atomic output publication. Linux adds address-space/CPU/file limits. Windows has no hard memory cap yet. Workers retain the user's filesystem permissions and are not a sandbox. Direct symlinks/reparse points are rejected, but hostile concurrent filesystem changes and parent-path reparse points are not fully isolated. Do not process untrusted files. No archive parser or SVG renderer is enabled. PDF transformations are not sanitization; active content can remain. A hard termination can leave a temporary work directory. Platform-specific CI is a regression gate, not a security certification.
