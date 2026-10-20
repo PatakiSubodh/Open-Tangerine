@@ -374,7 +374,7 @@ struct SettingsTabBar: View {
     @Namespace private var namespace
 
     var body: some View {
-        GlassEffectContainer(spacing: 0) {
+        GlassGroup {
             HStack(spacing: 2) {
                 ForEach(SettingsTab.allCases) { tab in
                     Button {
@@ -394,14 +394,14 @@ struct SettingsTabBar: View {
                     .background {
                         if model.tab == tab {
                             Color.clear
-                                .glassEffect(.regular.tint(Theme.accent).interactive(), in: Capsule())
+                                .glassSurface(tint: Theme.accent, interactive: true, in: Capsule())
                                 .matchedGeometryEffect(id: "selection", in: namespace)
                         }
                     }
                 }
             }
             .padding(3)
-            .glassEffect(.regular, in: Capsule())
+            .glassSurface(in: Capsule())
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.tab)
     }

@@ -147,7 +147,7 @@ struct RadialWheelView: View {
     var geometry: RadialGeometry
 
     var body: some View {
-        GlassEffectContainer(spacing: 0) {
+        GlassGroup {
             ZStack {
                 if items.isEmpty {
                     empty
@@ -186,7 +186,7 @@ struct RadialWheelView: View {
                     .position(mid)
             }
             .frame(width: rect.width, height: rect.height)
-            .glassEffect(selected ? .regular.tint(Theme.accent) : .regular, in: shape)
+            .glassSurface(tint: selected ? Theme.accent : nil, in: shape)
             .scaleEffect(selected && !reduceMotion ? 1.025 : 1)
             .offset(x: selected && !reduceMotion ? (mid.x - rect.midX) / geometry.labelRadius * 4 : 0,
                     y: selected && !reduceMotion ? (mid.y - rect.midY) / geometry.labelRadius * 4 : 0)
@@ -220,7 +220,7 @@ struct RadialWheelView: View {
             .padding(.horizontal, 12)
             .frame(height: 34)
             .frame(maxWidth: geometry.innerRadius * 2 - 8)
-            .glassEffect(.regular, in: Capsule())
+            .glassSurface(in: Capsule())
     }
 
     private var empty: some View {
@@ -238,7 +238,7 @@ struct RadialWheelView: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 12)
         .frame(maxWidth: geometry.outerRadius * 2)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .glassSurface(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
