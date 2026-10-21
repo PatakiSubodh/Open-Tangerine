@@ -3,7 +3,7 @@
 A local file converter and toolbox for **macOS**, with an early **Windows/Linux desktop edition**, by **Sintax Error Private Limited**.
 Local processing, no account, no subscription. GPL-3.0-only. Safety limits apply.
 
-**Mac status: 0.1.9 developer trial — ad-hoc signed, not Apple-notarized.** This is an independent project, not affiliated with Tangerine. It builds on [Satsuma](https://github.com/plyght/satsuma), with its MIT attribution preserved. It is not yet a complete replacement for Tangerine. See [limitations](#limitations).
+**Mac status: 0.1.10 developer trial — ad-hoc signed, not Apple-notarized.** This is an independent project, not affiliated with Tangerine. It builds on [Satsuma](https://github.com/plyght/satsuma), with its MIT attribution preserved. It is not yet a complete replacement for Tangerine. See [limitations](#limitations).
 
 ## Windows and Linux desktop edition
 
@@ -11,7 +11,7 @@ The new **0.2.0 early desktop trial** is a separate implementation with a smalle
 
 | Platform | Interface | Availability / requirements |
 |---|---|---|
-| macOS | Native menu bar, global drag wheel and notch | v0.1.9; macOS 26+, Apple silicon |
+| macOS | Native menu bar, global drag wheel and notch | v0.1.10; macOS 15+, universal Intel/Apple silicon build |
 | Windows | Batch file-drop window and progress panel | 0.2.0 early trial; Windows 10/11 x64; unsigned portable ZIP |
 | Linux | Batch file-drop window and progress panel | 0.2.0 early trial; x64 Ubuntu 24.04 / glibc 2.39+; portable tar.gz |
 
@@ -54,7 +54,7 @@ Download the trial ZIP, quit the previous app, unzip, then drag Open Tangerine i
 
 ## Install from source
 
-Requires **macOS 15 or later**, Xcode 26 / compatible Command Line Tools, and Git. The build script uses Apple's Swift compiler directly; no package manager or third-party Swift dependencies are required. Building with the macOS 26 SDK renders the native Liquid Glass surfaces; older toolchains substitute a translucent material with the same shapes, and macOS 26 keeps the glass either way.
+Requires **macOS 15 or later**, Xcode 26 / compatible Command Line Tools, and Git. The build script uses Apple's Swift compiler directly; no package manager or third-party Swift dependencies are required. Building with the macOS 26 SDK renders the native Liquid Glass surfaces; older toolchains substitute a translucent material with the same shapes, while binaries built with older SDKs retain the material fallback even on macOS 26.
 
 ```sh
 git clone https://github.com/sintaxerrorpvtltd/Open-Tangerine.git
@@ -67,7 +67,7 @@ To keep the app, drag `dist/Open Tangerine.app` into your Applications folder in
 
 Optional: install FFmpeg from your trusted package manager (`brew install ffmpeg` if you already use Homebrew). Settings → Formats shows whether FFmpeg is available. It is already present on the development Mac. We do not bundle or silently download it.
 
-## What changed in 0.1.9
+## What changed in 0.1.10
 
 Every menu command now has an icon. Company branding is corrected to **Sintax Error Private Limited**. Drag hover updates continuously, and internal non-file drags no longer trigger the wheel. In **Settings → General → Excluded applications**, use **Add Application…** to disable drag shortcuts in CorelDRAW or any selected application; remove it to enable them again. Menu-bar file picking remains available. Successful notch results retract automatically after two seconds, including when hovered; failures remain visible so their message can be read.
 
@@ -148,3 +148,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [build statu
 ## License and attribution
 
 Open Tangerine additions © 2026 Sintax Error Private Limited, licensed under **GPL-3.0-only**. See [LICENSE](LICENSE). Commercial use and sale are permitted under that license; distribution of covered derivatives requires corresponding source and the GPL terms. Upstream Satsuma code © 2026 plyght remains available under its original MIT terms, reproduced in [NativeApp/LICENSE](NativeApp/LICENSE). Contributors retain copyright in their contributions. The license does not grant rights to company names or logos.
+
+Mac compatibility integrates @Teshgotcode’s Liquid Glass availability wrappers (#1) with the universal build, non-notched HUD and radial-window fixes proposed by @Devansh-Kumar-Saini (#5). Native Liquid Glass remains on macOS 26 when built with its SDK. Intel hardware and individual multi-monitor arrangements still need community testing.

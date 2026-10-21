@@ -5,9 +5,29 @@ on:
     paths: [scripts/build-app.sh]
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: mac-release
+  cancel-in-progress: false
 jobs:
+  compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: command -v ffmpeg >/dev/null || brew install ffmpeg
+      - run: ./scripts/test.sh
+      - run: BUILD_UNIVERSAL=1 ./scripts/build-app.sh
   release:
+    needs: compatibility
+    permissions:
+      contents: write
+    env:
+      BUILD_UNIVERSAL: '1'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +42,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 'dist/Open Tangerine.app'
           test -x 'dist/Open Tangerine.app/Contents/MacOS/OpenTangerine'
           plutil -lint 'dist/Open Tangerine.app/Contents/Info.plist'
+          xcrun lipo -verify_arch arm64 x86_64 'dist/Open Tangerine.app/Contents/MacOS/OpenTangerine'
       - name: Package and publish new version
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,4 +54,4 @@ jobs:
           fi
           ditto -c -k --sequesterRsrc --keepParent 'dist/Open Tangerine.app' "dist/Open-Tangerine-$VERSION-macOS.zip"
           shasum -a 256 "dist/Open-Tangerine-$VERSION-macOS.zip" > dist/SHA256SUMS.txt
-          gh release create "v$VERSION" "dist/Open-Tangerine-$VERSION-macOS.zip" dist/SHA256SUMS.txt --target "$GITHUB_SHA" --title "Open Tangerine $VERSION · Developer trial" --notes 'Developer trial for macOS 26+. Ad-hoc signed, NOT Apple-notarized; macOS may block opening this trial. Download the ZIP, quit the previous version, and replace the app. Installation guide: https://sintaxerrorpvtltd.github.io/Open-Tangerine/#download . Includes complete menu icons, corrected Sintax Error branding, continuous drag hover highlighting, per-application drag exclusions and automatic two-second notch dismissal. Internal non-file drags no longer trigger the wheel. See README for tested coverage and limits. Automatic installation is not supported yet.'
+          gh release create "v$VERSION" "dist/Open-Tangerine-$VERSION-macOS.zip" dist/SHA256SUMS.txt --target "$GITHUB_SHA" --title "Open Tangerine $VERSION · Developer trial" --notes 'macOS 15+ compatibility release, universal Intel/Apple silicon binary. Preserves native Liquid Glass on macOS 26 and uses material fallback on older systems. Includes non-notched HUD positioning and radial window fixes. Thanks to Teshgotcode (#1) and Devansh-Kumar-Saini (#5). Automated macOS 15/26 build and regression checks; individual Intel hardware/desktop arrangements remain unverified. Ad-hoc signed, NOT Apple-notarized. Download, quit and replace manually; keep the previous app for rollback. https://sintaxerrorpvtltd.github.io/Open-Tangerine/#download'
