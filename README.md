@@ -54,7 +54,7 @@ Download the trial ZIP, quit the previous app, unzip, then drag Open Tangerine i
 
 ## Install from source
 
-Requires **macOS 26 or later**, Xcode 26 / compatible Command Line Tools, and Git. The build script uses Apple's Swift compiler directly; no package manager or third-party Swift dependencies are required.
+Requires **macOS 15 or later**, Xcode 26 / compatible Command Line Tools, and Git. The build script uses Apple's Swift compiler directly; no package manager or third-party Swift dependencies are required. Building with the macOS 26 SDK renders the native Liquid Glass surfaces; older toolchains substitute a translucent material with the same shapes, and macOS 26 keeps the glass either way.
 
 ```sh
 git clone https://github.com/sintaxerrorpvtltd/Open-Tangerine.git

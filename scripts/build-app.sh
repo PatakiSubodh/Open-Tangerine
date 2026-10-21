@@ -2,6 +2,8 @@
 set -euo pipefail
 # 0.1.9: reliable drag hover, per-app exclusions and two-second notch dismissal.
 cd "$(dirname "$0")/.."
+# Keep release binaries loadable on macOS 15; the 26 SDK defaults to a higher target.
+export MACOSX_DEPLOYMENT_TARGET=15.0
 app="$PWD/dist/Open Tangerine.app"
 mkdir -p "$app/Contents/MacOS" "$PWD/.build/module-cache"
 find NativeApp/Sources -name '*.swift' -print0 | xargs -0 xcrun swiftc -swift-version 5 -O -parse-as-library -module-cache-path "$PWD/.build/module-cache" -o "$app/Contents/MacOS/OpenTangerine"
@@ -17,7 +19,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1.9</string>
 <key>CFBundleVersion</key><string>10</string>
-<key>LSMinimumSystemVersion</key><string>26.0</string>
+<key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>

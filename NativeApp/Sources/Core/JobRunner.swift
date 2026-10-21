@@ -464,7 +464,7 @@ struct JobPillView: View {
         .background {
             if settings.notchSurface == .glass && !reduceTransparency {
                 Color.black.opacity(0.45)
-                    .glassEffect(.regular.tint(.black.opacity(0.45)), in: .rect)
+                    .glassSurface(tint: .black.opacity(0.45), in: .rect)
                     .overlay(alignment: .top) { Color.black.frame(height: topInset) }
             } else {
                 Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1)
@@ -558,7 +558,7 @@ struct JobHUDView: View {
         .padding(.trailing, 16)
         .padding(.bottom, 16)
         .frame(width: 340)
-        .background { Color.clear.glassEffect(.regular, in: .rect).ignoresSafeArea() }
+        .background { Color.clear.glassSurface(in: .rect).ignoresSafeArea() }
         .tint(Theme.accent)
         .onHover { runner.hoverResults($0) }
     }
