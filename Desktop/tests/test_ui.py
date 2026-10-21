@@ -15,7 +15,6 @@ class UITests(unittest.TestCase):
         w.close()
     def test_window_and_options(self):
         w=Window();w.show();self.app.processEvents();w.target.setCurrentText('Merge PDFs');self.assertFalse(w.width.isEnabled());w.target.setCurrentText('JPEG');self.assertTrue(w.width.isEnabled());w.close()
-if __name__=='__main__':unittest.main()
 
 class RegressionUITests(unittest.TestCase):
     @classmethod
@@ -26,15 +25,26 @@ class RegressionUITests(unittest.TestCase):
         w.result(0,'Done',['/merged.pdf'])
         self.assertTrue(all('Done' in w.list.item(i).text() for i in range(2)));w.close()
     def test_drag_always_requests_copy(self):
-        from unittest.mock import Mock
-        from PySide6.QtCore import QUrl,Qt
+        from PySide6.QtCore import QMimeData,QPoint,QPointF,QUrl,Qt
+        from PySide6.QtGui import QDragEnterEvent,QDropEvent
         from app import DropList
-        event=Mock();event.mimeData.return_value.hasUrls.return_value=True;event.mimeData.return_value.urls.return_value=[QUrl.fromLocalFile('/tmp/example.png')]
-        view=DropList();view.dragEnterEvent(event);event.setDropAction.assert_called_with(Qt.CopyAction);view.dropEvent(event);event.setDropAction.assert_called_with(Qt.CopyAction)
+        mime=QMimeData();mime.setUrls([QUrl.fromLocalFile('/tmp/example.png')])
+        view=DropList();received=[];view.files.connect(received.append)
+        for event in [QDragEnterEvent(QPoint(1,1),Qt.CopyAction|Qt.MoveAction,mime,Qt.LeftButton,Qt.ShiftModifier),QDropEvent(QPointF(1,1),Qt.CopyAction|Qt.MoveAction,mime,Qt.LeftButton,Qt.ShiftModifier)]:
+            if isinstance(event,QDragEnterEvent):view.dragEnterEvent(event)
+            else:view.dropEvent(event)
+            self.assertTrue(event.isAccepted());self.assertEqual(event.dropAction(),Qt.CopyAction)
+        self.assertEqual(received,[['/tmp/example.png']]);view.close()
 
     def test_move_only_drag_is_rejected(self):
-        from unittest.mock import Mock
-        from PySide6.QtCore import Qt
+        from PySide6.QtCore import QMimeData,QPoint,QPointF,QUrl,Qt
+        from PySide6.QtGui import QDragEnterEvent,QDropEvent
         from app import DropList
-        event=Mock();event.possibleActions.return_value=Qt.MoveAction
-        view=DropList();view.dragEnterEvent(event);event.ignore.assert_called_once();event.accept.assert_not_called()
+        mime=QMimeData();mime.setUrls([QUrl.fromLocalFile('/tmp/example.png')])
+        view=DropList();received=[];view.files.connect(received.append)
+        enter=QDragEnterEvent(QPoint(1,1),Qt.MoveAction,mime,Qt.LeftButton,Qt.ShiftModifier)
+        drop=QDropEvent(QPointF(1,1),Qt.MoveAction,mime,Qt.LeftButton,Qt.ShiftModifier)
+        view.dragEnterEvent(enter);view.dropEvent(drop)
+        self.assertFalse(enter.isAccepted());self.assertFalse(drop.isAccepted());self.assertEqual(received,[]);view.close()
+
+if __name__=='__main__':unittest.main()
