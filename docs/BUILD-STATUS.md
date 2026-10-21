@@ -1,3 +1,5 @@
+> Historical test record. Current release requirements and limitations are maintained in [README](../README.md).
+
 # Trial build status
 
 Version 0.1.7, 19 October 2026. Native Swift app, macOS 26+, Apple silicon development environment.

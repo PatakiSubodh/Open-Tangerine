@@ -1,9 +1,9 @@
 """Local conversion engine. No shell, network clients, deletion of inputs or archive extraction."""
 from __future__ import annotations
-import hashlib, json, os, re, stat, subprocess, tempfile, time, warnings
+import errno, hashlib, json, os, re, shutil, stat, subprocess, tempfile, time, warnings
 from pathlib import Path
 
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 MAX_BYTES = 100 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 MAX_OUTPUT = 512 * 1024 * 1024
@@ -23,10 +23,26 @@ def source_file(raw):
     if not stat.S_ISREG(s.st_mode) or p.is_symlink() or getattr(s,'st_file_attributes',0)&0x400:
         raise ConversionError('Select a regular file, not a folder, shortcut or device.')
     if s.st_size==0 or s.st_size>MAX_BYTES: raise ConversionError('Files must be nonempty and no larger than 100 MiB.')
-    return p.resolve(strict=True)
+    return checked_resolve(p, s)
+
+def checked_resolve(path, before):
+    """Detect replacement during canonicalization; not a filesystem sandbox."""
+    resolved=path.resolve(strict=True)
+    after=path.lstat();actual=resolved.stat()
+    if (before.st_dev,before.st_ino)!=(after.st_dev,after.st_ino) or (before.st_dev,before.st_ino)!=(actual.st_dev,actual.st_ino) or stat.S_ISLNK(after.st_mode) or getattr(after,'st_file_attributes',0)&0x400:
+        raise ConversionError('Path changed while being checked; select it again.')
+    return resolved
+
+def output_folder(raw):
+    folder=Path(raw)
+    if not folder.is_absolute():raise ConversionError('Choose an absolute local output folder.')
+    info=folder.lstat()
+    if not stat.S_ISDIR(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:
+        raise ConversionError('Choose a real local output folder; symbolic links and shortcuts are not supported.')
+    return checked_resolve(folder,info)
 
 def publish(stage, folder, stem, suffix):
-    """Exclusive atomic link: an existing file or symlink is never overwritten."""
+    """Never overwrite. Prefer atomic hardlink; exclusive copy supports removable disks."""
     if not stage.is_file() or not 0<stage.stat().st_size<=MAX_OUTPUT: raise ConversionError('Empty or oversized output.')
     stem=re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', stem).rstrip('. ')[:100] or 'converted'
     if stem.upper() in {'CON','PRN','AUX','NUL',*[f'COM{i}' for i in range(1,10)],*[f'LPT{i}' for i in range(1,10)]}: stem='file-'+stem
@@ -37,7 +53,24 @@ def publish(stage, folder, stem, suffix):
             return str(target)
         except FileExistsError: continue
         except OSError as e:
-            raise ConversionError('Output folder must support atomic file creation (for example NTFS or ext4). Choose a local folder.') from e
+            if e.errno not in (errno.EPERM,errno.EOPNOTSUPP,errno.EXDEV,errno.ENOSYS):
+                raise ConversionError('Cannot write to the output folder. Check permissions and free space.') from e
+            try:
+                fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_BINARY',0),0o600)
+            except FileExistsError:continue
+            identity=os.fstat(fd)
+            try:
+                with os.fdopen(fd,'wb') as out, stage.open('rb') as source:
+                    shutil.copyfileobj(source,out,1024*1024)
+                    out.flush();os.fsync(out.fileno())
+                return str(target)
+            except BaseException:
+                # Remove only the incomplete file this call created, never a replacement.
+                try:
+                    current=target.lstat()
+                    if (current.st_dev,current.st_ino)==(identity.st_dev,identity.st_ino):target.unlink()
+                except OSError:pass
+                raise
     raise ConversionError('Too many existing output names; choose another folder.')
 
 def open_image(p):
@@ -53,7 +86,7 @@ def open_image(p):
 
 def read_pdf(p):
     from pypdf import PdfReader
-    pdf=PdfReader(str(p),strict=True)
+    pdf=PdfReader(str(p),strict=False)
     if pdf.is_encrypted: raise ConversionError('Password-protected PDFs are not supported.')
     if not 0<len(pdf.pages)<=200: raise ConversionError('PDFs must contain 1–200 pages.')
     return pdf
@@ -65,7 +98,7 @@ def media(p, stage, target, ffmpeg):
     if p.suffix.lower() not in MEDIA_INPUTS: raise ConversionError('Unsupported media input; playlists and URLs are not accepted.')
     ext,args=MEDIA_OUTPUTS[target]
     # Input demuxer selected explicitly; network protocols unavailable to the job.
-    cmd=[str(exe),'-nostdin','-hide_banner','-loglevel','error','-n','-protocol_whitelist','file,pipe','-f',MEDIA_INPUTS[p.suffix.lower()],'-i',str(p),'-map_metadata','-1','-threads','1',*args,'-fs',str(MAX_OUTPUT),'-f',ext,str(stage)]
+    cmd=[str(exe),'-nostdin','-hide_banner','-loglevel','error','-n','-protocol_whitelist','file,pipe','-threads','1','-filter_threads','1','-filter_complex_threads','1','-f',MEDIA_INPUTS[p.suffix.lower()],'-i',str(p),'-map_metadata','-1','-threads','1',*args,'-fs',str(MAX_OUTPUT),'-f',ext,str(stage)]
     with tempfile.TemporaryFile() as log:
         proc=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=log)
         start=time.monotonic()
@@ -76,7 +109,7 @@ def media(p, stage, target, ffmpeg):
                 time.sleep(.05)
             if proc.returncode:
                 log.seek(0);detail=log.read(2000).decode('utf8','replace')
-                raise ConversionError('FFmpeg could not convert this file. Check its codec support. '+detail[-500:])
+                raise ConversionError(('FFmpeg reached a memory/thread resource limit. Try a smaller file. ' if 'pthread_create' in detail or 'Cannot allocate memory' in detail else 'FFmpeg could not convert this file; check the file and installed codecs. ')+detail[-500:])
         finally:
             if proc.poll() is None: proc.kill()
             proc.wait()
@@ -89,11 +122,14 @@ def convert(job):
     if not isinstance(raws,list) or not 1<=len(raws)<=100: raise ConversionError('Select 1–100 files.')
     paths=[source_file(p) for p in raws]
     if target!='Merge PDFs' and len(paths)!=1: raise ConversionError('Each conversion job accepts one input; use the batch queue.')
-    folder=Path(job.get('output') or paths[0].parent)
-    if not folder.is_absolute() or not folder.is_dir() or folder.is_symlink(): raise ConversionError('Choose an existing local output folder.')
-    folder=folder.resolve(strict=True)
+    folder=output_folder(job.get('output') or paths[0].parent)
+    work_root=folder
+    if job.get('_work_root'):
+        work_root=output_folder(job['_work_root'])
+        if work_root.parent!=folder or not work_root.name.startswith('.opentangerine-job-'):
+            raise ConversionError('Invalid job staging folder.')
     p=paths[0]; stem=p.stem+'-converted';results=[]
-    with tempfile.TemporaryDirectory(prefix='.opentangerine-',dir=folder) as work:
+    with tempfile.TemporaryDirectory(prefix='.opentangerine-',dir=work_root) as work:
         stage=Path(work)/'output'
         if target in IMAGE_OUTPUTS or target=='Image → PDF':
             if p.suffix.lower() not in IMAGE_INPUTS: raise ConversionError('This operation requires a supported image.')
@@ -148,6 +184,8 @@ def convert(job):
             h=hashlib.sha256()
             with p.open('rb') as f:
                 for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
+            if any(c in p.name for c in ('\n','\r','\\')):
+                raise ConversionError('Rename this file without newlines or backslashes before creating a checksum.')
             stage.write_text(h.hexdigest()+'  '+p.name+'\n',encoding='utf8')
             results.append(publish(stage,folder,p.stem,'sha256'))
         else:
@@ -156,7 +194,17 @@ def convert(job):
             value=p.read_text(encoding='utf-8-sig');value=value.replace('\r\n','\n')
             if target=='SRT → VTT':
                 if '-->' not in value: raise ConversionError('No subtitle timestamps found.')
-                value=re.sub(r'(\d{2}:\d{2}:\d{2}),(\d{3})',r'\1.\2',value)
+                lines=value.splitlines()
+                for i,line in enumerate(lines):
+                    if '-->' not in line:continue
+                    m=re.fullmatch(r'((?:\d{2,}:)?\d{2}:\d{2}),([0-9]{3}) --> ((?:\d{2,}:)?\d{2}:\d{2}),([0-9]{3})',line)
+                    if not m:raise ConversionError('Only simple SRT timestamps are supported.')
+                    times=[]
+                    for t,ms in ((m[1],m[2]),(m[3],m[4])):
+                        if any(int(v)>59 for v in t.split(':')[-2:]):raise ConversionError('Invalid subtitle timestamp.')
+                        times.append(('00:'+t if t.count(':')==1 else t)+'.'+ms)
+                    lines[i]=' --> '.join(times)
+                value='\n'.join(lines)+'\n'
                 value='WEBVTT\n\n'+value;ext='vtt'
             else:
                 if not value.startswith('WEBVTT') or '-->' not in value: raise ConversionError('Invalid WebVTT file.')
