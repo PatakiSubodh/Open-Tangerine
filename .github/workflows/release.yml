@@ -42,7 +42,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 'dist/Open Tangerine.app'
           test -x 'dist/Open Tangerine.app/Contents/MacOS/OpenTangerine'
           plutil -lint 'dist/Open Tangerine.app/Contents/Info.plist'
-          xcrun lipo -verify_arch arm64 x86_64 'dist/Open Tangerine.app/Contents/MacOS/OpenTangerine'
+          xcrun lipo 'dist/Open Tangerine.app/Contents/MacOS/OpenTangerine' -verify_arch arm64 x86_64
       - name: Package and publish new version
         env:
           GH_TOKEN: ${{ github.token }}
