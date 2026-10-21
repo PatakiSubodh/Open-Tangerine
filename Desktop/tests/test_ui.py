@@ -31,3 +31,10 @@ class RegressionUITests(unittest.TestCase):
         from app import DropList
         event=Mock();event.mimeData.return_value.hasUrls.return_value=True;event.mimeData.return_value.urls.return_value=[QUrl.fromLocalFile('/tmp/example.png')]
         view=DropList();view.dragEnterEvent(event);event.setDropAction.assert_called_with(Qt.CopyAction);view.dropEvent(event);event.setDropAction.assert_called_with(Qt.CopyAction)
+
+    def test_move_only_drag_is_rejected(self):
+        from unittest.mock import Mock
+        from PySide6.QtCore import Qt
+        from app import DropList
+        event=Mock();event.possibleActions.return_value=Qt.MoveAction
+        view=DropList();view.dragEnterEvent(event);event.ignore.assert_called_once();event.accept.assert_not_called()

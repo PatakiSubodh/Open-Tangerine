@@ -36,14 +36,14 @@ class DropList(QListWidget):
         super().__init__();self.setAcceptDrops(True);self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setMinimumHeight(190)
     def dragEnterEvent(self,event):
-        if event.mimeData().hasUrls() and all(u.isLocalFile() for u in event.mimeData().urls()):
+        if event.possibleActions() & Qt.CopyAction and event.mimeData().hasUrls() and all(u.isLocalFile() for u in event.mimeData().urls()):
             self.setStyleSheet('border:2px solid #ff610a;background:#2a201a;');event.setDropAction(Qt.CopyAction);event.accept()
         else:event.ignore()
     def dragMoveEvent(self,event): self.dragEnterEvent(event)
     def dragLeaveEvent(self,event): self.setStyleSheet('');event.accept()
     def dropEvent(self,event):
         self.setStyleSheet('')
-        if event.mimeData().hasUrls() and all(u.isLocalFile() for u in event.mimeData().urls()):
+        if event.possibleActions() & Qt.CopyAction and event.mimeData().hasUrls() and all(u.isLocalFile() for u in event.mimeData().urls()):
             self.files.emit([u.toLocalFile() for u in event.mimeData().urls()]);event.setDropAction(Qt.CopyAction);event.accept()
         else:event.ignore()
 
