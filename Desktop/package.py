@@ -12,6 +12,7 @@ shutil.copytree(r/'licenses',lic/'explicit',dirs_exist_ok=True)
 # Ship the corresponding application source next to the portable executable.
 src=dest/'source/Desktop';src.mkdir(parents=True,exist_ok=True)
 shutil.copyfile(r.parent/'LICENSE',src.parent/'LICENSE')
+shutil.copyfile(r.parent/'THIRD_PARTY_NOTICES.md',src.parent/'THIRD_PARTY_NOTICES.md')
 shutil.copyfile(r/'README.md',src/'README.md')
 shutil.copyfile(r/'RELEASE.md',src/'RELEASE.md')
 shutil.copytree(r/'licenses',src/'licenses',dirs_exist_ok=True)

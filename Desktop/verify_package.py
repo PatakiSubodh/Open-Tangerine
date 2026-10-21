@@ -10,6 +10,6 @@ if os.name=='nt':
     with zipfile.ZipFile(p) as archive:names=archive.namelist()
 else:
     with tarfile.open(p) as archive:names=archive.getnames()
-for name in ['licenses/explicit/LGPL-3.0-only.txt','licenses/explicit/Python-3.12-LICENSE.txt','licenses/Open-Tangerine-GPL-3.0.txt','THIRD_PARTY_NOTICES.md','source/Desktop/engine.py','source/Desktop/licenses/LGPL-3.0-only.txt']:
+for name in ['licenses/explicit/LGPL-3.0-only.txt','licenses/explicit/Python-3.12-LICENSE.txt','licenses/Open-Tangerine-GPL-3.0.txt','THIRD_PARTY_NOTICES.md','source/THIRD_PARTY_NOTICES.md','source/Desktop/engine.py','source/Desktop/licenses/LGPL-3.0-only.txt']:
     assert 'OpenTangerine/'+name in names,name
 print('PASS: archive checksum, explicit notices and rebuildable source')
