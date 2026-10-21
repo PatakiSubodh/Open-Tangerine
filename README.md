@@ -50,7 +50,7 @@ Download the trial ZIP, quit the previous app, unzip, then drag Open Tangerine i
 
 </details>
 
-*These are illustrated workflows, not screen recordings or conversion-speed benchmarks. The glass effect is an illustration of the native material. macOS 26+ developer trial.*
+*These are illustrated workflows, not screen recordings or conversion-speed benchmarks. The glass effect is an illustration of the native material. macOS 15+ developer trial; native Liquid Glass on macOS 26.*
 
 ## Install from source
 
