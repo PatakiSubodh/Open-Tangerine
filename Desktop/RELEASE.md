@@ -1,14 +1,12 @@
-First Windows/Linux desktop trial. **This is a separate, smaller feature set than the Mac app.**
+# Windows/Linux desktop 0.2.1 — reliability update
 
-- Windows 10/11 x64 portable ZIP; Linux x64 Ubuntu 24.04 / glibc 2.39+ tar.gz.
-- Multi-file drag into the app, image conversion/resize/rotation, image to PDF, PDF merge/split/text, simple SRT/VTT and SHA-256.
-- Optional audio/video conversion with your own trusted FFmpeg installation.
-- Originals retained; exclusive output naming; separate workers, cancellation and time/output limits.
-- Source, dependency versions and license texts are included in each package.
+Thanks to @eklavyamathur9 for the detailed report in #3.
 
-Both platform CI jobs must pass conversion/safety tests and packaged startup/conversion smoke checks before this release is published. This is not a guarantee of compatibility with every machine. Unsigned Windows binary; no administrator access required. No global Shift wheel or physical-notch integration. Windows hard memory isolation remains unfinished; process trusted files.
+- Limit FFmpeg decoder and filter threads as well as encoder threads, without raising the Linux memory ceiling.
+- Support FAT32/exFAT output through exclusive creation; never overwrite an existing file. A hard crash can leave a partial fallback copy.
+- Explicitly include LGPL and Python licence texts, dependency notices and rebuildable source.
+- Detect path replacement during canonicalization, improve symlink errors, tolerate recoverable PDF xref problems, normalize short SRT timestamps and reject ambiguous checksum filenames.
+- Show PDF merge results on every input row; force Copy drag/drop semantics; improve worker cleanup and signal errors.
+- Add Linux xcb/Xvfb packaged startup, archived-package validation and checksum verification before publishing.
 
-Extract the full archive, then run OpenTangerine.exe (Windows) or OpenTangerine (Linux). Keep the _internal folder alongside the executable. Compare SHA-256 with the companion checksum. Do not disable OS protection globally.
-
-Full installation, capabilities and limitations: https://github.com/sintaxerrorpvtltd/Open-Tangerine/blob/main/Desktop/README.md
-Mac users: keep using the separate macOS release.
+This remains an unsigned early trial with a window-based interface. Global Windows Shift wheels are being reviewed separately; they are not in this release. Windows has no hard memory cap. Workers are not an OS sandbox. Use trusted files. Keep the previous package for rollback.

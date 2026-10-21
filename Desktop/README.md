@@ -1,4 +1,4 @@
-# Open Tangerine — Windows and Linux trial 0.2.0
+# Open Tangerine — Windows and Linux trial 0.2.1
 
 This is an early cross-platform desktop edition, not a port of every Mac feature.
 No account, telemetry, uploads, administrator service or automatic downloads.
@@ -24,9 +24,9 @@ The system-wide Shift drag wheel, physical Mac notch, Mac tool editors, tray mod
 
 ## Limits and safety
 
-100 files per batch, 100 MiB per input, 40 megapixels per image, 200 pages per PDF/merged result, 512 MiB output ceiling. Each conversion uses a separate process with a 180-second parent deadline. FFmpeg jobs have a 150-second deadline and one conversion thread. Linux workers additionally have address-space, CPU and output-file limits. Windows workers do not yet have a hard memory cap. Workers are **not an OS security sandbox**: process trusted files only. No claim of malicious-file immunity or zero errors is made.
+100 files per batch, 100 MiB per input, 40 megapixels per image, 200 pages per PDF/merged result, 512 MiB output ceiling. Each conversion uses a separate process with a 180-second parent deadline. FFmpeg jobs have a 150-second deadline and bounded decoder, encoder and filter threads. Linux workers additionally have address-space, CPU and output-file limits. Windows workers do not yet have a hard memory cap. Workers are **not an OS security sandbox**: process trusted files only. No claim of malicious-file immunity or zero errors is made.
 
-Regular-file checks reject direct symlinks/reparse points and devices. Publication uses exclusive atomic links on the same local filesystem (NTFS/ext4 recommended). Cloud/network/removable filesystems may not support this and will return an error. Cancellation or a crash can leave a hidden `.opentangerine-*` working folder in the output directory; remove it only after the app is closed. Successful files from partial PDF splitting or a cancelled batch are retained.
+Regular-file checks reject direct symlinks/reparse points and devices. Publication prefers atomic links and falls back to exclusive creation/copy on FAT32/exFAT. Existing destinations are never replaced. The fallback is not atomic: a hard crash can leave a partial output. Parent-owned staging is cleaned after ordinary cancellation/timeouts; an app or machine crash can still leave a hidden `.opentangerine-*` working folder. Remove leftovers only after the app is closed. Successful files from partial PDF splitting or a cancelled batch are retained.
 
 ## Build and test
 
@@ -45,3 +45,5 @@ Build separately on Windows and Linux. The CI tests conversion, corruption, limi
 Source: https://github.com/sintaxerrorpvtltd/Open-Tangerine/tree/main/Desktop
 Downloads: https://sintaxerrorpvtltd.github.io/Open-Tangerine/#desktop
 Copyright 2026 Sintax Error Private Limited. GPL-3.0-only; dependencies retain their licenses. Qt libraries are distributed dynamically in `_internal` and can be replaced with compatible builds. Dependency versions and license texts are included. For corresponding dependency source, use the exact version tags at https://code.qt.io/pyside/pyside-setup.git/ , https://code.qt.io/qt/qtbase.git/ , https://github.com/python-pillow/Pillow and https://github.com/py-pdf/pypdf . No modifications are made to those dependencies. Python is included under the PSF license; PyInstaller's bootloader uses its distribution exception.
+
+Linux GUI packaging is exercised with the real xcb plugin under Xvfb; this does not verify every physical desktop or Wayland compositor.
