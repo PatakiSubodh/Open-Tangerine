@@ -37,14 +37,14 @@ class DropList(QListWidget):
         self.setMinimumHeight(190)
     def dragEnterEvent(self,event):
         if event.mimeData().hasUrls() and all(u.isLocalFile() for u in event.mimeData().urls()):
-            self.setStyleSheet('border:2px solid #ff610a;background:#2a201a;');event.acceptProposedAction()
+            self.setStyleSheet('border:2px solid #ff610a;background:#2a201a;');event.setDropAction(Qt.CopyAction);event.accept()
         else:event.ignore()
     def dragMoveEvent(self,event): self.dragEnterEvent(event)
     def dragLeaveEvent(self,event): self.setStyleSheet('');event.accept()
     def dropEvent(self,event):
         self.setStyleSheet('')
         if event.mimeData().hasUrls() and all(u.isLocalFile() for u in event.mimeData().urls()):
-            self.files.emit([u.toLocalFile() for u in event.mimeData().urls()]);event.acceptProposedAction()
+            self.files.emit([u.toLocalFile() for u in event.mimeData().urls()]);event.setDropAction(Qt.CopyAction);event.accept()
         else:event.ignore()
 
 class Window(QMainWindow):
@@ -112,8 +112,11 @@ class Window(QMainWindow):
         self.batch=Batch(list(self.paths),self.target.currentText(),{'output':self.output,'width':self.width.value(),'rotation':self.rotate.currentIndex()*90,'ffmpeg':self.settings.value('ffmpeg','')})
         self.batch.result.connect(self.result);self.batch.progress.connect(lambda n,total:self.progress.setValue(round(n/total*100)));self.batch.finished.connect(self.finished);self.batch.start()
     def result(self,index,status,outputs):
-        self.outputs.extend(outputs);item=self.list.item(index)
-        if item:item.setText(Path(self.paths[index]).name+' — '+status);item.setToolTip('\n'.join(outputs) or status)
+        self.outputs.extend(outputs)
+        indexes=range(len(self.paths)) if self.batch and self.batch.target=='Merge PDFs' else [index]
+        for i in indexes:
+            item=self.list.item(i)
+            if item:item.setText(Path(self.paths[i]).name+' — '+status);item.setToolTip('\n'.join(outputs) or status)
         self.status.setText(status);self.open.setEnabled(bool(self.outputs))
     def finished(self):
         for button in (self.add,self.clear,self.folder,self.convert,self.target):button.setEnabled(True)
