@@ -11,17 +11,17 @@ Local processing, no account, no subscription. GPL-3.0-only. Safety limits apply
 
 ## Windows and Linux desktop edition
 
-The new **0.2.1 early desktop trial** is a separate implementation with a smaller feature set. [Download status and installation](https://sintaxerrorpvtltd.github.io/Open-Tangerine/#desktop) · [Desktop source and guide](Desktop/README.md) · [Windows/Linux build checks](https://github.com/sintaxerrorpvtltd/Open-Tangerine/actions/workflows/desktop.yml).
+The new **0.2.2 early desktop trial** is a separate implementation with a smaller feature set. [Download status and installation](https://sintaxerrorpvtltd.github.io/Open-Tangerine/#desktop) · [Desktop source and guide](Desktop/README.md) · [Windows/Linux build checks](https://github.com/sintaxerrorpvtltd/Open-Tangerine/actions/workflows/desktop.yml).
 
 | Platform | Interface | Availability / requirements |
 |---|---|---|
 | macOS | Native menu bar, global drag wheel and notch | v0.1.10; macOS 15+, universal Intel/Apple silicon build |
-| Windows | Batch file-drop window and progress panel | 0.2.1 early trial; Windows 10/11 x64; unsigned portable ZIP |
-| Linux | Batch file-drop window and progress panel | 0.2.1 early trial; x64 Ubuntu 24.04 / glibc 2.39+; portable tar.gz |
+| Windows | Batch window, glass format picker, opt-in Explorer Shift wheel and tray | 0.2.2 early trial; Windows 10/11 x64; unsigned portable ZIP |
+| Linux | Batch file-drop window and progress panel | 0.2.2 early trial; x64 Ubuntu 24.04 / glibc 2.39+; portable tar.gz |
 
 Desktop packages are published only after both CI jobs pass conversion tests and packaged startup/conversion checks. If the download page does not show a package yet, verification is still pending or the release could not be checked.
 
-Windows/Linux include image conversion, resize/rotate, image-to-PDF, PDF merge/split/text extraction, simple SRT/VTT, SHA-256 and optional FFmpeg media conversion. **No global Shift wheel, physical notch, HEIC/SVG, Office conversion, OCR or full Mac editor parity in this edition.** Drop files into its window. Each failed file is reported independently. Originals and existing outputs are preserved. Workers have limits but are not an OS security sandbox; use trusted files. [Detailed limits](Desktop/README.md#limits-and-safety).
+Windows/Linux include image conversion, resize/rotate, image-to-PDF, PDF merge/split/text extraction, simple SRT/VTT, SHA-256 and optional FFmpeg media conversion. Windows adds an **opt-in experimental Explorer/Desktop Shift drag wheel and tray**; Linux uses the app window. **No physical notch, HEIC/SVG, Office conversion, OCR or full Mac editor parity in this edition.** Drop files into its window. Each failed file is reported independently. Originals and existing outputs are preserved. Workers have limits but are not an OS security sandbox; use trusted files. [Detailed limits](Desktop/README.md#limits-and-safety).
 
 The illustrations below demonstrate the **Mac app**. The remaining Mac-specific sections describe its own capabilities.
 
@@ -30,6 +30,8 @@ The illustrations below demonstrate the **Mac app**. The remaining Mac-specific 
 **[Website, download and installation guide](https://sintaxerrorpvtltd.github.io/Open-Tangerine/)** · [GitHub releases](https://github.com/sintaxerrorpvtltd/Open-Tangerine/releases)
 
 Download the trial ZIP, quit the previous app, unzip, then drag Open Tangerine into Applications and choose Replace if updating. macOS may block this unnotarized trial; see the website for Apple's official per-app opening guidance. Never disable Gatekeeper globally. Check for Updates opens the website with your installed version; the website compares published releases and provides a manual download. No Apple Developer subscription is required for update checks or hosting.
+
+The Windows glass wheel and tray are adapted from [VandanPatell’s contribution (#2)](https://github.com/sintaxerrorpvtltd/Open-Tangerine/pull/2), with additional drag/drop and shutdown checks.
 
 ## See it in motion
 
@@ -154,3 +156,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [build statu
 Open Tangerine additions © 2026 Sintax Error Private Limited, licensed under **GPL-3.0-only**. See [LICENSE](LICENSE). Commercial use and sale are permitted under that license; distribution of covered derivatives requires corresponding source and the GPL terms. Upstream Satsuma code © 2026 plyght remains available under its original MIT terms, reproduced in [NativeApp/LICENSE](NativeApp/LICENSE). Contributors retain copyright in their contributions. The license does not grant rights to company names or logos.
 
 Mac compatibility integrates @Teshgotcode’s Liquid Glass availability wrappers (#1) with the universal build, non-notched HUD and radial-window fixes proposed by @Devansh-Kumar-Saini (#5). Native Liquid Glass remains on macOS 26 when built with its SDK. Intel hardware and individual multi-monitor arrangements still need community testing.
+
+Document/PDF feature proposals and contribution boundaries: [roadmap](ROADMAP.md).

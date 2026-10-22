@@ -1,4 +1,4 @@
-# Open Tangerine — Windows and Linux trial 0.2.1
+# Open Tangerine — Windows and Linux trial 0.2.2
 
 This is an early cross-platform desktop edition, not a port of every Mac feature.
 No account, telemetry, uploads, administrator service or automatic downloads.
@@ -20,7 +20,9 @@ PDF: image to PDF, merge, split into single-page files, extract existing text. N
 
 Media: MP4, WebM, MP3, WAV, FLAC and Ogg output from supported local audio/video inputs. Select a **trusted, separately installed FFmpeg executable** using Set FFmpeg. The app does not install or bundle it. Codec support depends on that installation. No playlists or network URLs. Basic SRT/VTT subtitle conversion and SHA-256 file checksums are also included.
 
-The system-wide Shift drag wheel, physical Mac notch, Mac tool editors, tray mode and per-app exclusions are **not** implemented in this edition. There is no global keyboard interception. The progress panel is inside the app window.
+Windows now includes a glass conversion wheel and optional tray mode, adapted from @VandanPatell’s PR #2. The app opens a visible window by default. Enable **experimental Shift drag wheel in Explorer / Desktop** to try it: drag selected files and hold Shift briefly, then drop onto a format. Escape cancels. The wheel only starts in Explorer/Desktop; other editors are excluded. It polls modifier state without consuming keys or recording text. Selection lookup uses the built-in Windows PowerShell and may take a moment; nothing is downloaded. Actual dropped local files are validated, and only Copy drops are accepted.
+
+Use **Run in background** for tray mode, or launch with `--background`. Double-click the tray icon to restore the window. Quit cancels active work and waits for the worker before exiting. Without a system tray the default window stays visible. `--window` always requests the window. Linux uses the window and glass format picker; no global wheel or tray is enabled there. The physical Mac notch and Mac tool editors are not included.
 
 ## Limits and safety
 

@@ -9,19 +9,19 @@ class UITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
     def test_queue_deduplicates_and_rejects_directory(self):
-        w=Window()
+        w=Window(global_wheel=False)
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'one.png';Image.new('RGB',(8,8)).save(p);w.add_paths([str(p),str(p),d]);self.assertEqual(len(w.paths),1);w.clear_files();self.assertEqual(w.list.count(),0)
         w.close()
     def test_window_and_options(self):
-        w=Window();w.show();self.app.processEvents();w.target.setCurrentText('Merge PDFs');self.assertFalse(w.width.isEnabled());w.target.setCurrentText('JPEG');self.assertTrue(w.width.isEnabled());w.close()
+        w=Window(global_wheel=False);w.show();self.app.processEvents();w.target.setCurrentText('Merge PDFs');self.assertFalse(w.width.isEnabled());w.target.setCurrentText('JPEG');self.assertTrue(w.width.isEnabled());w.close()
 
 class RegressionUITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
     def test_merge_marks_every_input(self):
         from app import Batch
-        w=Window();w.paths=['/a.pdf','/b.pdf'];w.list.addItems(['a.pdf','b.pdf']);w.batch=Batch(w.paths,'Merge PDFs',{})
+        w=Window(global_wheel=False);w.paths=['/a.pdf','/b.pdf'];w.list.addItems(['a.pdf','b.pdf']);w.batch=Batch(w.paths,'Merge PDFs',{})
         w.result(0,'Done',['/merged.pdf'])
         self.assertTrue(all('Done' in w.list.item(i).text() for i in range(2)));w.close()
     def test_drag_always_requests_copy(self):
