@@ -1,5 +1,9 @@
 # Open Tangerine
 
+<a href="https://www.trymacapps.com" target="_blank" rel="noopener">
+  <img src="https://www.trymacapps.com/badge.png" alt="Featured on TryMacApps" width="200" height="67" />
+</a>
+
 A local file converter and toolbox for **macOS**, with an early **Windows/Linux desktop edition**, by **Sintax Error Private Limited**.
 Local processing, no account, no subscription. GPL-3.0-only. Safety limits apply.
 
