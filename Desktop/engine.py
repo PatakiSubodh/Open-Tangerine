@@ -13,6 +13,7 @@ MEDIA_INPUTS = {'.mp4': 'mov', '.mov': 'mov', '.m4v': 'mov', '.mkv': 'matroska',
 MEDIA_OUTPUTS = {'MP4': ('mp4', ['-c:v','libx264','-preset','fast','-crf','23','-c:a','aac','-movflags','+faststart']), 'WEBM': ('webm',['-c:v','libvpx-vp9','-deadline','realtime','-cpu-used','6','-c:a','libopus']), 'MP3': ('mp3',['-vn','-c:a','libmp3lame','-b:a','192k']), 'WAV': ('wav',['-vn','-c:a','pcm_s16le']), 'FLAC': ('flac',['-vn','-c:a','flac']), 'OGG': ('ogg',['-vn','-c:a','libvorbis'])}
 OPERATIONS = list(IMAGE_OUTPUTS) + ['Image → PDF', 'PDF → Text', 'Merge PDFs', 'Split PDF', 'SRT → VTT', 'VTT → SRT', 'SHA-256'] + list(MEDIA_OUTPUTS)
 class ConversionError(ValueError): pass
+MEMORY_MESSAGE='This file needs more memory than a conversion is allowed to use. Try a smaller file or a smaller output size.'
 
 def source_file(raw):
     p=Path(raw).expanduser()
@@ -234,6 +235,7 @@ def worker_main():
         raw=sys.stdin.buffer.read(65537)
         if len(raw)>65536: raise ConversionError('Job request too large.')
         result={'ok':True,'outputs':convert(json.loads(raw))}
+    except MemoryError: result={'ok':False,'error':MEMORY_MESSAGE}
     except Exception as e: result={'ok':False,'error':str(e)[:1000] or type(e).__name__}
     print(json.dumps(result,ensure_ascii=True),flush=True)
     return 0 if result['ok'] else 1
