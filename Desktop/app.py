@@ -9,11 +9,12 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QTimer, QUrl, QSettings
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QAbstractItemView,QLineEdit,QMenu)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QAbstractItemView,QLineEdit,QCheckBox,QMenu)
 import engine, prefs, settings_dialog, theme, dialogs
 from engine import VERSION, OPERATIONS, IMAGE_OUTPUTS, MEDIA_OUTPUTS, source_file
 from batch import Batch
 from glass_wheel import GlassWheel, WHEEL_STYLE
+import wheel
 WEBSITE='https://sintaxerrorpvtltd.github.io/Open-Tangerine/'
 
 class DropList(QListWidget):
@@ -52,8 +53,8 @@ HINTS={'OCR → Text':'Reads the text in images and scanned PDFs into a .txt fil
 STYLE=theme.STYLE
 
 class Window(QMainWindow):
-    def __init__(self):
-        super().__init__();self.paths=[];self.outputs=[];self.batch=None;self.tool_windows=[];self.counts=[0,0]
+    def __init__(self,enable_wheel=False):
+        super().__init__();self.paths=[];self.outputs=[];self.batch=None;self.quitting=False;self.wheel=None;self.tool_windows=[];self.counts=[0,0]
         self.settings=QSettings('Sintax Error Private Limited','Open Tangerine Desktop')
         self.setWindowTitle('Open Tangerine');self.resize(960,700);self.setMinimumSize(860,600)
         icon=Path(__file__).with_name('icon.png')
@@ -96,9 +97,13 @@ class Window(QMainWindow):
         self.progress=QProgressBar();self.progress.setValue(0);self.progress.setTextVisible(False);self.progress.setVisible(False);layout.addWidget(self.progress)
         self.status=QLabel('');self.status.setWordWrap(True);self.status.setTextFormat(Qt.PlainText);layout.addWidget(self.status)
         foot=QHBoxLayout();layout.addLayout(foot)
-        for label,slot,tip in (('Settings','show_settings','Output folder, theme and helper programs'),('Supported formats','show_limits',''),('Downloads / updates','open_site','')):
+        for label,slot,tip in (('Settings','show_settings','Output folder, drag wheel, excluded applications and helper programs'),('Supported formats','show_limits',''),('Downloads / updates','open_site','')):
             b=QPushButton(label);b.setProperty('link',True);b.setToolTip(tip);b.setCursor(Qt.PointingHandCursor);b.clicked.connect(getattr(self,slot));foot.addWidget(b)
         foot.addStretch(1);version=QLabel('Sintax Error Private Limited · GPL-3.0-only · v'+VERSION);version.setObjectName('muted');foot.addWidget(version)
+        if enable_wheel and wheel.supported():
+            self.wheel=wheel.WheelController(self.settings,self.windowIcon(),self)
+            self.wheel.show_window.connect(self.bring_forward);self.wheel.quit_requested.connect(self.quit_app)
+            self.wheel.start()
         self.glass.selected.connect(self.target.setCurrentText);self.target.currentTextChanged.connect(self.glass.set_current)
         self.target.currentTextChanged.connect(self.update_options);self.refresh_targets();self.update_folder_label()
     def refresh_targets(self):
@@ -163,7 +168,7 @@ class Window(QMainWindow):
     def reset_folder(self):self.output='';self.update_folder_label()
     def open_site(self):QDesktopServices.openUrl(QUrl(WEBSITE+'?platform=desktop&version='+VERSION+'#desktop'))
     def show_settings(self,tab='general'):
-        settings_dialog.SettingsDialog(self.settings,self,tab=tab if isinstance(tab,str) else 'general').exec();self.update_folder_label();self.update_options();self.glass.set_dark(prefs.wheel_theme(self.settings)=='dark')
+        settings_dialog.SettingsDialog(self.settings,self,self.wheel,tab if isinstance(tab,str) else 'general').exec();self.update_folder_label();self.update_options();self.glass.set_dark(prefs.wheel_theme(self.settings)=='dark')
     def show_limits(self):
         dialogs.InfoDialog('Supported formats','Everything runs on this computer. Failed files never stop the rest of a batch.',[
             ('Images','Output: PNG, JPEG, WebP, AVIF, TIFF, BMP, HEIC. Input also includes SVG. Resize and rotate. Single-frame only (HEIC: primary image), up to 40 megapixels. SVG is drawn at its own size, or scaled to the maximum side you set. RAW is not supported.'),
@@ -172,6 +177,7 @@ class Window(QMainWindow):
             ('Office (needs LibreOffice)','Word, Excel, PowerPoint and OpenDocument files to PDF. LibreOffice is found automatically when installed, or choose it in Settings.'),
             ('Audio and video (needs FFmpeg)','MP4, WebM, MOV, MKV, AVI, WMV, GIF, MP3, M4A, WAV, FLAC, Ogg, Opus, AIFF and WMA. Codecs depend on your FFmpeg. FFmpeg is found automatically when installed, or choose it in Settings.'),
             ('Subtitles and checksums','SRT and VTT conversion (also to plain text), and SHA-256 checksums.'),
+            ('Windows quick wheel','Hold Shift while dragging files from Explorer or the desktop and release over a format. Alt opens the editing tools and Ctrl+Shift opens file actions (reveal, copy, duplicate, SHA-256). The wheel always copies, so originals are never moved. Programs where it should stay off can be added in Settings.'),
             ('Good to know','Workers have time and output limits but are not an operating-system sandbox, so process trusted files. Archives and the Mac notch are not included.')],self).exec()
     def start(self):
         if not self.paths:return
@@ -212,9 +218,17 @@ class Window(QMainWindow):
         window.finished.connect(lambda _=0,w=window:self.tool_windows.remove(w) if w in self.tool_windows else None);window.show()
     def bring_forward(self):self.showNormal();self.raise_();self.activateWindow()
     def quit_app(self):
+        self.quitting=True
+        if self.wheel:self.wheel.shutdown()
         for w in list(self.tool_windows):w.close()
         self.close()
     def closeEvent(self,event):
+        # With the tray available, closing only hides the window; a running conversion keeps going.
+        if self.wheel and self.wheel.tray and self.wheel.enabled and not self.quitting:
+            event.ignore();self.hide()
+            if not self.settings.value('tray_hint_shown',False,type=bool):
+                self.settings.setValue('tray_hint_shown',True);self.wheel.tray.showMessage('Open Tangerine is still running','The Shift-drag wheel stays available. Use the tray icon to open or quit.')
+            return
         if self.batch and self.batch.isRunning():
             self.batch.cancel.set();event.ignore();theme.set_status(self.status,'Stopping conversion before closing…');QTimer.singleShot(200,self.close)
         else:event.accept()
@@ -231,15 +245,16 @@ def main():
         try:ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('SintaxError.OpenTangerine.Desktop')
         except Exception:pass
     app=QApplication(sys.argv);app.setStyle('Fusion');app.setWindowIcon(QIcon(str(Path(__file__).with_name('icon.png'))));theme.apply(app)
-    # Single instance: a second launch asks the running one to show itself and exits.
+    # Single instance: a second launch (login entry plus a manual start, say) asks the running one to show itself and exits.
     guard=QLocalSocket();guard.connectToServer(INSTANCE)
     if '--smoke-test' not in sys.argv and guard.waitForConnected(300):
-        guard.write(b'show');guard.waitForBytesWritten(300)
+        if '--background' not in sys.argv:guard.write(b'show');guard.waitForBytesWritten(300)
         return 0
     QLocalServer.removeServer(INSTANCE);server=QLocalServer();server.listen(INSTANCE)
-    window=Window()
+    window=Window(enable_wheel='--smoke-test' not in sys.argv)
     server.newConnection.connect(lambda:(server.nextPendingConnection(),window.bring_forward()))
-    window.show()
+    # --background (for a startup entry): live in the tray with the wheel armed and only show the window if there is no tray to reopen it from.
+    if not ('--background' in sys.argv and window.wheel and window.wheel.tray and window.wheel.enabled):window.show()
     if '--smoke-test' in sys.argv:
         # Exercise the lazily imported tool window (Pillow preview, canvas, form) from the packaged build.
         import toolops, toolwin

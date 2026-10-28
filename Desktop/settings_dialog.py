@@ -1,5 +1,5 @@
-"""Settings window: General (output folder, theme), Formats (helper programs) and About."""
-import os, subprocess
+"""Settings window: General (output folder, start with Windows, drag wheel, excluded applications), Formats (helper programs) and About."""
+import os, subprocess, sys
 from pathlib import Path
 from PySide6.QtCore import Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
@@ -9,7 +9,7 @@ import engine, prefs, theme
 
 PURPOSE = {'ffmpeg': 'Audio and video conversion, trim, compress', 'tesseract': 'OCR: read text from images and scanned PDFs', 'soffice': 'Word, Excel and PowerPoint to PDF'}
 VERSION_ARGS = {'ffmpeg': ['-version'], 'tesseract': ['--version'], 'soffice': ['--version']}
-PAGES = (('general', 'General', 'Where results go, and how the app looks.'), ('formats', 'Formats', 'The optional programs behind OCR, Office and audio/video.'), ('about', 'About', 'Small utility. Open possibilities.'))
+PAGES = (('general', 'General', 'Where results go, and how the drag wheel behaves.'), ('formats', 'Formats', 'The optional programs behind OCR, Office and audio/video.'), ('about', 'About', 'Small utility. Open possibilities.'))
 WEBSITE = 'https://sintaxerrorpvtltd.github.io/Open-Tangerine/'
 STYLE = '''
 QListWidget#sidebar{background:#141414;border:none;border-right:1px solid #2c2c2c;border-radius:0;padding:14px 10px;outline:0}
@@ -54,8 +54,8 @@ def section(title, body=None):
     frame, box = theme.card();return theme.label(title, 'heading'), frame, box
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings, parent=None, tab='general'):
-        super().__init__(parent);self.settings = settings;self.rows = {};self.checks = [];self.pages = {}
+    def __init__(self, settings, parent=None, controller=None, tab='general'):
+        super().__init__(parent);self.settings = settings;self.controller = controller;self.rows = {};self.checks = [];self.pages = {}
         self.setWindowTitle('Settings');self.setMinimumSize(780, 560);self.resize(820, 620);self.setStyleSheet(STYLE)
         outer = QHBoxLayout(self);outer.setContentsMargins(0, 0, 0, 0);outer.setSpacing(0)
         self.sidebar = QListWidget();self.sidebar.setObjectName('sidebar');self.sidebar.setFixedWidth(190);self.sidebar.setFocusPolicy(Qt.TabFocus)
@@ -86,13 +86,31 @@ class SettingsDialog(QDialog):
         self.custom_label = theme.label('', 'muted', True);custom.addWidget(self.custom_label, 1);pick = QPushButton('Choose folder…');pick.clicked.connect(self.choose_folder);custom.addWidget(pick);box.addWidget(self.custom_row)
         self.reveal = QCheckBox('Show the results in Explorer when a conversion finishes');self.reveal.setChecked(prefs.reveal_results(self.settings));self.reveal.toggled.connect(lambda on: self.settings.setValue('output/reveal', bool(on)));box.addWidget(self.reveal)
         box.addWidget(theme.label('A folder you pick for one conversion in the main window overrides this once.', 'muted', True))
-        # The glass wheel beside the file list follows it on every platform.
+        # Shown on every platform: the glass wheel in the main window follows it everywhere, and on Windows the drag wheel too.
         head, frame, box = section('Appearance');col.addWidget(head);col.addWidget(frame)
-        row = QHBoxLayout();row.addWidget(QLabel('Theme'));self.wheel_theme = QComboBox();self.wheel_theme.setAccessibleName('Wheel theme')
+        row = QHBoxLayout();row.addWidget(QLabel('Theme'));self.wheel_theme = QComboBox();self.wheel_theme.setAccessibleName('Wheel and progress card theme')
         for key, title in prefs.WHEEL_THEMES: self.wheel_theme.addItem(title, key)
         self.wheel_theme.setCurrentIndex(max(0, self.wheel_theme.findData(prefs.wheel_theme(self.settings))));self.wheel_theme.currentIndexChanged.connect(lambda _: self.settings.setValue('wheel/theme', self.wheel_theme.currentData()));row.addWidget(self.wheel_theme, 1);box.addLayout(row)
-        box.addWidget(theme.label('Light is frosted glass; Dark uses the window colours, charcoal and Tangerine orange. Applies to the wheel beside the file list.', 'muted', True))
-        self.mode_changed()
+        box.addWidget(theme.label('Light is frosted glass; Dark uses the window colours, charcoal and Tangerine orange. Applies to the wheel beside the file list' + (', the drag wheel and the progress card.' if os.name == 'nt' else '.'), 'muted', True))
+        if os.name == 'nt':
+            import wheel
+            head, frame, box = section('Windows');col.addWidget(head);col.addWidget(frame)
+            self.startup = QCheckBox('Start with Windows');self.startup.setChecked(wheel.startup_enabled());self.startup.toggled.connect(self.set_startup);box.addWidget(self.startup)
+            box.addWidget(theme.label('Opens Open Tangerine in the system tray after you sign in, ready for the drag wheel. Moving or renaming the program afterwards turns this off; switch it on again here.', 'muted', True))
+        if self.controller:
+            head, frame, box = section('Drag wheel');col.addWidget(head);col.addWidget(frame)
+            self.wheel_on = QCheckBox('Drag wheel');self.wheel_on.setChecked(self.controller.enabled);self.wheel_on.toggled.connect(self.controller.set_enabled);box.addWidget(self.wheel_on)
+            row = QHBoxLayout();row.addWidget(QLabel('Progress card'));self.card_position = QComboBox();self.card_position.setAccessibleName('Progress card position')
+            for key, title in prefs.CARD_POSITIONS: self.card_position.addItem(title, key)
+            self.card_position.setCurrentIndex(max(0, self.card_position.findData(prefs.card_position(self.settings))));self.card_position.currentIndexChanged.connect(lambda _: self.settings.setValue('card/position', self.card_position.currentData()));row.addWidget(self.card_position, 1);box.addLayout(row)
+            self.any_app = QCheckBox('Also trigger from other apps');self.any_app.setChecked(self.settings.value('wheel/any_app', False, type=bool));self.any_app.toggled.connect(self.controller.set_any_app);box.addWidget(self.any_app)
+            box.addWidget(theme.label('Hold a key while you drag files, then release over a tile. Shift converts, Alt opens the editing tools and Ctrl+Shift opens file actions. By default the wheel starts from Explorer, the desktop and file dialogs only.', 'muted', True))
+        head, frame, box = section('Excluded applications');col.addWidget(head);col.addWidget(frame)
+        box.addWidget(theme.label('The drag wheel stays off when a drag starts in one of these programs, for example a design tool that uses Shift while dragging. You can still open the wheel from the tray menu.', 'muted', True))
+        self.excluded = QListWidget();self.excluded.setMinimumHeight(96);self.excluded.setMaximumHeight(150);self.excluded.itemSelectionChanged.connect(self.update_excluded_buttons);box.addWidget(self.excluded)
+        row = QHBoxLayout();add = QPushButton('Add application…');add.clicked.connect(self.add_excluded);row.addWidget(add)
+        self.remove_excluded = QPushButton('Remove');self.remove_excluded.clicked.connect(self.remove_selected_excluded);row.addWidget(self.remove_excluded);row.addStretch(1);box.addLayout(row)
+        self.update_excluded();self.mode_changed()
     def mode_changed(self, *_):
         mode = self.mode.currentData();self.settings.setValue('output/mode', mode);self.custom_row.setVisible(mode == 'custom')
         folder = prefs.custom_folder(self.settings)
@@ -100,6 +118,26 @@ class SettingsDialog(QDialog):
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, 'Choose where converted files are saved', prefs.custom_folder(self.settings) or str(Path.home()))
         if folder: self.settings.setValue('output/folder', str(Path(folder)));self.mode_changed()
+    def set_startup(self, on):
+        import wheel
+        try: wheel.set_startup(on)
+        except OSError: self.startup.blockSignals(True);self.startup.setChecked(wheel.startup_enabled());self.startup.blockSignals(False)
+        if self.controller: self.controller.refresh_menu()
+    def update_excluded(self):
+        self.excluded.clear()
+        for name, display in prefs.excluded(self.settings).items():
+            item = QListWidgetItem(f'{display}   ({name})');item.setData(Qt.UserRole, name);self.excluded.addItem(item)
+        self.update_excluded_buttons()
+    def update_excluded_buttons(self): self.remove_excluded.setEnabled(bool(self.excluded.selectedItems()))
+    def add_excluded(self):
+        start = os.environ.get('ProgramFiles', str(Path.home())) if os.name == 'nt' else str(Path.home())
+        paths = QFileDialog.getOpenFileNames(self, 'Choose programs where the drag wheel should stay off', start, 'Programs (*.exe)')[0]
+        for p in paths: prefs.add_excluded(self.settings, p)
+        self.update_excluded()
+    def remove_selected_excluded(self):
+        for item in self.excluded.selectedItems(): prefs.remove_excluded(self.settings, item.data(Qt.UserRole))
+        self.update_excluded()
+
     # --- Formats ---------------------------------------------------------------------
     def build_formats(self, col):
         col.addWidget(theme.label('Open Tangerine finds these programs automatically when they are installed. They run only when a conversion needs them and are never downloaded for you.', 'muted', True))
@@ -148,4 +186,5 @@ class SettingsDialog(QDialog):
 
     def done(self, result):
         for check in self.checks: check.wait(10000)
+        if self.controller: self.controller.refresh_menu()
         super().done(result)
