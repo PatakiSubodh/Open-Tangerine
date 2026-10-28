@@ -9,7 +9,10 @@ class Batch(QThread):
     def __init__(self,paths,target,options):
         super().__init__();self.paths=paths;self.target=target;self.options=options;self.cancel=threading.Event()
     def combined(self):
-        """One job for the whole list (Merge PDFs) instead of one per file."""
+        """One job for the whole list (Merge PDFs, and tools that join files) instead of one per file."""
+        if self.target.startswith('tool:'):
+            import toolops
+            return toolops.TOOLS[self.target[5:]].combined
         return self.target=='Merge PDFs'
     def run(self):
         groups=[self.paths] if self.combined() else [[p] for p in self.paths]

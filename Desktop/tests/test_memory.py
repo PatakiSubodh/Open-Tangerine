@@ -82,6 +82,22 @@ class RealWorker(unittest.TestCase):
     def test_a_real_conversion_under_the_default_limit_works(self):
         info = {};out = runner.run_job(self.job(), info=info);self.assertTrue(Path(out[0]).is_file())
         if WIN: self.assertTrue(info['capped']);self.assertLess(info['peak_memory'], runner.WORKER_MEMORY // 3)
+    def test_tools_and_ffmpeg_style_children_share_the_limit(self):
+        if not WIN: self.skipTest('Windows job objects')
+        info = {};runner.run_job({'target': 'tool:edit_image', 'paths': [str(self.src)], 'output': str(self.root), 'params': {'exposure': .5, 'vignette': .4}}, info=info);self.assertGreater(info['peak_memory'], 100 * MiB)
+
+FFMPEG = os.environ.get('OT_FFMPEG') or os.environ.get('OT_TEST_FFMPEG')
+
+@unittest.skipUnless(WIN and FFMPEG, 'Windows job objects and FFmpeg (set OT_FFMPEG)')
+class FfmpegChild(unittest.TestCase):
+    """FFmpeg is started by the worker, so it must count against the same limit."""
+    def test_ffmpeg_shares_the_limit_of_its_worker(self):
+        with tempfile.TemporaryDirectory() as d:
+            clip = Path(d) / 'v.mp4';subprocess.run([FFMPEG, '-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=1920x1080:rate=30', '-t', '1', '-pix_fmt', 'yuv420p', str(clip)], check=True)
+            job = {'paths': [str(clip)], 'target': 'tool:compress', 'output': d, 'params': {'level': 'strong'}, 'ffmpeg': FFMPEG};info = {}
+            self.assertTrue(Path(runner.run_job(job, info=info)[0]).is_file());self.assertGreater(info['peak_memory'], 250 * MiB)        # far more than the Python worker alone
+            with self.assertRaisesRegex(ValueError, 'more memory than a conversion is allowed'): runner.run_job(job, memory_limit=120 * MiB)
+
 @unittest.skipUnless(WIN and os.environ.get('OT_SLOW'), 'slow: set OT_SLOW=1 on Windows (40-megapixel encodes)')
 class WorstCase(unittest.TestCase):
     """The heaviest legitimate jobs must fit with room to spare, or the cap would break real work."""

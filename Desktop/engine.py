@@ -33,7 +33,7 @@ GIF_TARGETS = ['MP4', 'WEBM', 'MOV', 'MKV', 'AVI', 'WMV']
 AUDIO_INPUTS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.aiff', '.aif'}
 TEXT_INPUTS = {'.txt', '.md', '.log', '.text'}
 DOC_OPERATIONS = ['Image → DOCX', 'PDF → PNG', 'PDF → JPEG', 'PDF → DOCX', 'Text → PDF', 'Text → PNG', 'Text → JPEG', 'Text → SRT', 'Text → VTT', 'Subtitle → Text']
-PAGE_PIXELS = {'a4': (1240, 1754)}          # 150 dpi
+PAGE_PIXELS = {'a4': (1240, 1754), 'letter': (1275, 1650)}          # 150 dpi
 
 def on_page(img, size):
     """Centre an RGB image on a white page of `size` pixels, shrinking it to leave a margin."""
@@ -70,6 +70,16 @@ def output_folder(raw):
     if not stat.S_ISDIR(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:
         raise ConversionError('Choose a real local output folder; symbolic links and shortcuts are not supported.')
     return checked_resolve(folder,info)
+
+def job_folders(job, first):
+    """Output folder and staging root for a job. The runner passes a parent-owned `_work_root` so a killed worker leaves nothing behind."""
+    folder=output_folder(job.get('output') or first.parent)
+    work_root=folder
+    if job.get('_work_root'):
+        work_root=output_folder(job['_work_root'])
+        if work_root.parent!=folder or not work_root.name.startswith('.opentangerine-job-'):
+            raise ConversionError('Invalid job staging folder.')
+    return folder,work_root
 
 def publish(stage, folder, stem, suffix):
     """Never overwrite. Prefer atomic hardlink; exclusive copy supports removable disks."""
@@ -315,17 +325,15 @@ def media(p, stage, target, ffmpeg):
 
 def convert(job):
     target=job.get('target')
+    if isinstance(target,str) and target.startswith('tool:'):
+        import toolops
+        return toolops.run_tool(job)
     if target not in OPERATIONS: raise ConversionError('Unsupported operation.')
     raws=job.get('paths',[])
     if not isinstance(raws,list) or not 1<=len(raws)<=100: raise ConversionError('Select 1–100 files.')
     paths=[source_file(p) for p in raws]
     if target!='Merge PDFs' and len(paths)!=1: raise ConversionError('Each conversion job accepts one input; use the batch queue.')
-    folder=output_folder(job.get('output') or paths[0].parent)
-    work_root=folder
-    if job.get('_work_root'):
-        work_root=output_folder(job['_work_root'])
-        if work_root.parent!=folder or not work_root.name.startswith('.opentangerine-job-'):
-            raise ConversionError('Invalid job staging folder.')
+    folder,work_root=job_folders(job,paths[0])
     p=paths[0]; stem=p.stem+'-converted';results=[]
     with tempfile.TemporaryDirectory(prefix='.opentangerine-',dir=work_root) as work:
         stage=Path(work)/'output'

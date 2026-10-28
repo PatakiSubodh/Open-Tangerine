@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QTimer, QUrl, QSettings
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QAbstractItemView,QLineEdit)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QAbstractItemView,QLineEdit,QMenu)
 import engine, prefs, settings_dialog, theme, dialogs
 from engine import VERSION, OPERATIONS, IMAGE_OUTPUTS, MEDIA_OUTPUTS, source_file
 from batch import Batch
@@ -53,7 +53,7 @@ STYLE=theme.STYLE
 
 class Window(QMainWindow):
     def __init__(self):
-        super().__init__();self.paths=[];self.outputs=[];self.batch=None;self.counts=[0,0]
+        super().__init__();self.paths=[];self.outputs=[];self.batch=None;self.tool_windows=[];self.counts=[0,0]
         self.settings=QSettings('Sintax Error Private Limited','Open Tangerine Desktop')
         self.setWindowTitle('Open Tangerine');self.resize(960,700);self.setMinimumSize(860,600)
         icon=Path(__file__).with_name('icon.png')
@@ -71,6 +71,7 @@ class Window(QMainWindow):
         self.add=QPushButton('Add files…');self.add.clicked.connect(self.pick);row.addWidget(self.add)
         self.remove=QPushButton('Remove selected');self.remove.setToolTip('Or press Delete');self.remove.clicked.connect(self.remove_selected);row.addWidget(self.remove)
         self.clear=QPushButton('Clear all');self.clear.clicked.connect(self.clear_files);row.addWidget(self.clear);row.addStretch(1)
+        self.tools=QPushButton('Edit tools…');self.tools.setToolTip('Crop, trim, compress, merge, redact and more for the files in the list');self.tools.clicked.connect(self.show_tools);row.addWidget(self.tools)
         step=QLabel('2   Choose what to make');step.setObjectName('step');layout.addWidget(step)
         row=QHBoxLayout();layout.addLayout(row);row.addWidget(QLabel('Convert to'))
         self.target=QComboBox();self.target.setMinimumContentsLength(16);self.target.setMaxVisibleItems(20);row.addWidget(self.target,1)
@@ -127,7 +128,7 @@ class Window(QMainWindow):
         self.convert.setText(f'Convert {n} file{"s" if n!=1 else ""} to {op}' if n and op else 'Convert')
         self.convert.setEnabled(bool(n) and not busy and not missing)
         self.convert.setToolTip('Add at least one file first.' if not n else f'Install {engine.TOOLS[key][0]} first.' if missing else '')
-        self.remove.setEnabled(bool(self.list.selectedItems()) and not busy);self.clear.setEnabled(bool(n) and not busy)
+        self.remove.setEnabled(bool(self.list.selectedItems()) and not busy);self.clear.setEnabled(bool(n) and not busy);self.tools.setEnabled(not busy)
     def set_busy(self,busy):
         for w in (self.add,self.folder,self.folder_reset,self.target,self.glass,self.width,self.rotate,self.lang):w.setEnabled(not busy)
         self.cancel.setVisible(busy)
@@ -198,8 +199,21 @@ class Window(QMainWindow):
         if self.batch:self.batch.cancel.set();theme.set_status(self.status,'Cancelling… files already converted are kept.')
     def open_output(self):
         if self.outputs:QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.outputs[-1]).parent)))
+    def show_tools(self):
+        import toolops
+        available=toolops.tools_for(self.paths);menu=QMenu(self)
+        if not self.paths:menu.addAction('Add files first').setEnabled(False)
+        elif not available:menu.addAction('No tools for this mix of files').setEnabled(False)
+        for tool in available:menu.addAction(f'{tool.title}  —  {tool.caption}').triggered.connect(lambda _=False,t=tool:self.open_tool(t))
+        menu.exec(self.tools.mapToGlobal(self.tools.rect().bottomLeft()))
+    def open_tool(self,tool):
+        import toolwin
+        window=toolwin.ToolWindow(tool,list(self.paths),self.settings);self.tool_windows.append(window)
+        window.finished.connect(lambda _=0,w=window:self.tool_windows.remove(w) if w in self.tool_windows else None);window.show()
     def bring_forward(self):self.showNormal();self.raise_();self.activateWindow()
-    def quit_app(self):self.close()
+    def quit_app(self):
+        for w in list(self.tool_windows):w.close()
+        self.close()
     def closeEvent(self,event):
         if self.batch and self.batch.isRunning():
             self.batch.cancel.set();event.ignore();theme.set_status(self.status,'Stopping conversion before closing…');QTimer.singleShot(200,self.close)
@@ -226,7 +240,11 @@ def main():
     window=Window()
     server.newConnection.connect(lambda:(server.nextPendingConnection(),window.bring_forward()))
     window.show()
-    if '--smoke-test' in sys.argv:QTimer.singleShot(400,app.quit)
+    if '--smoke-test' in sys.argv:
+        # Exercise the lazily imported tool window (Pillow preview, canvas, form) from the packaged build.
+        import toolops, toolwin
+        tool_window=toolwin.ToolWindow(toolops.TOOLS['crop_image'],[str(Path(__file__).with_name('icon.png'))],window.settings);tool_window.show()
+        QTimer.singleShot(500,tool_window.close);QTimer.singleShot(700,app.quit)
     # Ctrl+C in the terminal: Python only sees the signal when it gets control back from Qt, so tick a timer and quit cleanly.
     signal.signal(signal.SIGINT,lambda *_:QTimer.singleShot(0,window.quit_app));tick=QTimer();tick.start(250);tick.timeout.connect(lambda:None)
     return app.exec()

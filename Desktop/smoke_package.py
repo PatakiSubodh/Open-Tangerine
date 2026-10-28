@@ -38,7 +38,16 @@ with tempfile.TemporaryDirectory() as folder:
  with Image.open(worker({'paths':[str(pdf)],'target':'PDF → PNG','output':folder})[0]) as im:assert im.size[0]>0
  import zipfile
  with zipfile.ZipFile(worker({'paths':[str(p)],'target':'Image → DOCX','output':folder})[0]) as z:assert b'w:w="11906"' in z.read('word/document.xml')
-print('PASS: packaged GUI launch plus PNG, SVG, HEIC, AVIF, PDF-render/OCR and document worker jobs')
+ with Image.open(worker({'paths':[str(p)],'target':'tool:edit_image','output':folder,'params':{'exposure':.4,'vignette':.3,'grain':.2}})[0]) as im:assert im.size==(20,20)
+ # Editing tools run through the same packaged worker.
+ crop=worker({'paths':[str(p)],'target':'tool:crop_image','output':folder,'params':{'rect':[[0,0,.5,.5]]}})[0]
+ with Image.open(crop) as im:assert im.size==(10,10)
+ merged=worker({'paths':[str(pdf),str(pdf)],'target':'tool:merge_pdf','output':folder})[0]
+ from pypdf import PdfReader
+ assert len(PdfReader(merged).pages)==2
+ collage=worker({'paths':[str(p),str(p)],'target':'tool:collage','output':folder,'params':{'columns':2,'cell':100}})[0]
+ with Image.open(collage) as im:assert im.size[0]>200
+print('PASS: packaged GUI launch plus PNG, SVG, HEIC, AVIF, PDF-render/OCR, document and editing-tool worker jobs')
 
 # Exercise the FFmpeg subprocess under the packaged worker's Linux resource limits.
 import shutil

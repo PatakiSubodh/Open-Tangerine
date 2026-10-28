@@ -75,6 +75,11 @@ class RegressionUITests(unittest.TestCase):
 class DialogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
+    def test_colour_dialog_presets_set_the_colour(self):
+        from PySide6.QtGui import QColor
+        import dialogs
+        d=dialogs.ColorDialog(QColor('#ff610a'));self.assertEqual(d.colour().name(),'#ff610a')
+        d.picker.setCurrentColor(QColor(dialogs.SWATCHES[7]));self.assertEqual(d.colour().name(),dialogs.SWATCHES[7]);d.close()
     def test_info_dialog_and_settings_dialog_build(self):
         import dialogs,settings_dialog
         from PySide6.QtCore import QSettings
