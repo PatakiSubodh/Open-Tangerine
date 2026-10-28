@@ -1,3 +1,4 @@
+from unittest import mock
 import concurrent.futures, hashlib, json, os, shutil, subprocess, sys, tempfile, threading, unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -8,6 +9,8 @@ from pypdf import PdfReader, PdfWriter
 
 class ConversionTests(unittest.TestCase):
     def setUp(self):
+        # Tests must not pick up helpers (FFmpeg, Tesseract, LibreOffice) installed on the developer's machine.
+        patcher=mock.patch('engine.find_tool',return_value=None);patcher.start();self.addCleanup(patcher.stop)
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name).resolve();self.src=self.root/'源 image ; $danger.png';Image.new('RGBA',(32,24),(255,0,0,128)).save(self.src)
     def tearDown(self):self.tmp.cleanup()
     def job(self,target,paths=None,**kw):return dict(paths=[str(p) for p in (paths or [self.src])],target=target,output=str(self.root),**kw)
@@ -35,6 +38,8 @@ class ConversionTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:out=list(pool.map(lambda _:publish(stage,self.root,'same','txt'),range(20)))
         self.assertEqual(len(set(out)),20);self.assertTrue(all(Path(p).read_bytes()==b'safe' for p in out))
     def test_image_pdf(self):self.assertEqual(len(PdfReader(convert(self.job('Image → PDF'))[0]).pages),1)
+    def test_image_pdf_is_a4(self):
+        page=PdfReader(convert(self.job('Image → PDF'))[0]).pages[0];self.assertAlmostEqual(float(page.mediabox.width),595.2,delta=1);self.assertAlmostEqual(float(page.mediabox.height),842.0,delta=1)
     def test_pdf_merge_split_text(self):
         a=self.pdf();b=self.pdf('two.pdf',1);merged=convert(self.job('Merge PDFs',[a,b]))[0];self.assertEqual(len(PdfReader(merged).pages),3)
         pages=convert(self.job('Split PDF',[a]));self.assertEqual(len(pages),2);self.assertTrue(all(len(PdfReader(p).pages)==1 for p in pages))
@@ -119,4 +124,88 @@ class ConversionTests(unittest.TestCase):
         with self.assertRaisesRegex(ConversionError,'Animated'):convert(self.job('JPEG',[p]))
     def test_batch_limit(self):
         with self.assertRaises(ConversionError):convert(self.job('Merge PDFs',[self.src]*101))
+    def tool(self,name,body):
+        """Stand-in for a user-installed helper: a launcher that runs a Python script with the exact arguments."""
+        script=self.root/(name+'.py');script.write_text(body,encoding='utf8')
+        if os.name=='nt':launcher=self.root/(name+'.bat');launcher.write_text(f'@"{sys.executable}" "{script}" %*\r\n')
+        else:launcher=self.root/name;launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n');launcher.chmod(0o755)
+        return str(launcher)
+    def test_heic_roundtrip(self):
+        heic=Path(convert(self.job('HEIC'))[0]);self.assertEqual(heic.suffix,'.heic')
+        back=Path(convert(self.job('PNG',[heic]))[0])
+        with Image.open(back) as im:self.assertEqual(im.size,(32,24))
+    def test_heic_corrupt(self):
+        p=self.root/'bad.heic';p.write_bytes(b'not heic at all')
+        with self.assertRaises(Exception):convert(self.job('PNG',[p]))
+        self.assertFalse(list(self.root.glob('*converted*')))
+    def svg(self,body='<rect width="40" height="20" fill="#ff0000"/>',size='width="40" height="20"'):
+        p=self.root/'drawing.svg';p.write_text(f'<svg xmlns="http://www.w3.org/2000/svg" {size}>{body}</svg>');return p
+    def test_svg_to_png_pdf_and_size(self):
+        p=self.svg()
+        with Image.open(convert(self.job('PNG',[p]))[0]) as im:self.assertEqual(im.size,(40,20));self.assertEqual(im.convert('RGBA').getpixel((5,5)),(255,0,0,255))
+        with Image.open(convert(self.job('PNG',[p],width=80))[0]) as im:self.assertEqual(im.size,(80,40))
+        self.assertEqual(len(PdfReader(convert(self.job('Image → PDF',[p]))[0]).pages),1)
+    def test_svg_transparent_background_and_jpeg_white(self):
+        p=self.svg('<rect width="10" height="20" fill="#00f"/>')
+        with Image.open(convert(self.job('PNG',[p]))[0]) as im:self.assertEqual(im.convert('RGBA').getpixel((30,10))[3],0)
+        with Image.open(convert(self.job('JPEG',[p]))[0]) as im:self.assertGreater(min(im.getpixel((30,10))),240)
+    def test_svg_limits(self):
+        with self.assertRaisesRegex(ConversionError,'40 megapixels'):convert(self.job('PNG',[self.svg(size='width="20000" height="20000"')]))
+        p=self.svg();p.write_text(p.read_text()+'<!--'+'x'*(5*1024*1024)+'-->')
+        with self.assertRaisesRegex(ConversionError,'5 MiB'):convert(self.job('PNG',[p]))
+    def test_ocr_image_and_pdf(self):
+        ocr=self.tool('fake-tesseract',"import sys\nassert sys.argv[3:7]==['-l','eng','--psm','3'] and '--dpi' in sys.argv,sys.argv\nopen(sys.argv[2]+'.txt','w').write('Hello OCR\\n')\n")
+        out=Path(convert(self.job('OCR → Text',[self.src],tesseract=ocr))[0]);self.assertEqual(out.read_text(encoding='utf8'),'Hello OCR\n')
+        out=Path(convert(self.job('OCR → Text',[self.pdf()],tesseract=ocr))[0]);self.assertEqual(out.read_text(encoding='utf8').count('Hello OCR'),2)
+    def test_ocr_validation(self):
+        with mock.patch('engine.find_tool',return_value=None),self.assertRaisesRegex(ConversionError,'Tesseract.*not found'):convert(self.job('OCR → Text'))
+        ocr=self.tool('fake-tesseract','')
+        with self.assertRaisesRegex(ConversionError,'language'):convert(self.job('OCR → Text',tesseract=ocr,ocr_lang='eng; calc'))
+        with self.assertRaisesRegex(ConversionError,'could not read'):convert(self.job('OCR → Text',tesseract=ocr))
+        with self.assertRaisesRegex(ConversionError,'50 pages'):convert(self.job('OCR → Text',[self.pdf(pages=51)],tesseract=ocr))
+        self.assertFalse(list(self.root.glob('*converted*')))
+    def test_ocr_finds_installed_tesseract_without_settings(self):
+        ocr=self.tool('fake-tesseract',"import sys\nopen(sys.argv[2]+'.txt','w').write('found it\\n')\n")
+        with mock.patch('engine.find_tool',return_value=Path(ocr)):
+            self.assertEqual(Path(convert(self.job('OCR → Text'))[0]).read_text(encoding='utf8'),'found it\n')
+    def test_ocr_retries_sparse_layouts_when_page_analysis_finds_nothing(self):
+        ocr=self.tool('fake-tesseract',"import sys\nopen(sys.argv[2]+'.txt','w').write('word\\n' if sys.argv[6]=='11' else '')\n")
+        self.assertEqual(Path(convert(self.job('OCR → Text',tesseract=ocr))[0]).read_text(encoding='utf8'),'word\n')
+    def test_ocr_explains_missing_language_data(self):
+        ocr=self.tool('fake-tesseract',"import sys\nprint('Failed loading language deu')\nsys.exit(1)\n")
+        with self.assertRaisesRegex(ConversionError,'no data for language "deu"'):convert(self.job('OCR → Text',tesseract=ocr,ocr_lang='deu'))
+    def test_ocr_searchable_pdf(self):
+        body="import sys\nfrom pypdf import PdfWriter\nw=PdfWriter();w.add_blank_page(100,100)\nw.write(sys.argv[2]+'.pdf')\n"
+        ocr=self.tool('fake-tesseract',body)
+        out=Path(convert(self.job('OCR → Searchable PDF',[self.pdf(pages=2)],tesseract=ocr))[0])
+        self.assertTrue(out.name.endswith('-searchable.pdf'));self.assertEqual(len(PdfReader(str(out)).pages),2)
+    def test_tool_detection_ignores_relative_path_entries(self):
+        import engine
+        with mock.patch.dict(os.environ,{'PATH':'relative-dir'}),mock.patch('engine._tool_dirs',return_value=[]):self.assertIsNone(engine.find_tool('tesseract'))
+    def test_ocr_no_text(self):
+        ocr=self.tool('fake-tesseract',"import sys\nopen(sys.argv[2]+'.txt','w').write(' \\n')\n")
+        with self.assertRaisesRegex(ConversionError,'No text'):convert(self.job('OCR → Text',tesseract=ocr))
+    def test_office_to_pdf(self):
+        body=("import sys\nfrom pathlib import Path\nfrom pypdf import PdfWriter\na=sys.argv\n"
+              "assert '--headless' in a and any(x.startswith('-env:UserInstallation=file:///') for x in a),a\n"
+              "out=Path(a[a.index('--outdir')+1]);src=Path(a[-1]);assert src.name=='input.docx'\n"
+              "w=PdfWriter();w.add_blank_page(100,100);w.write(out/'input.pdf')\n")
+        soffice=self.tool('fake-soffice',body);doc=self.root/'报告 final.docx';doc.write_bytes(b'PK-not-really');before=doc.read_bytes()
+        out=Path(convert(self.job('Office → PDF',[doc],soffice=soffice))[0]);self.assertEqual(out.suffix,'.pdf');self.assertEqual(len(PdfReader(out).pages),1)
+        self.assertEqual(doc.read_bytes(),before);self.assertFalse([p for p in self.root.glob('*.lock*')]);self.assertFalse([p for p in self.root.iterdir() if p.name.startswith('.opentangerine')])
+    def test_office_validation(self):
+        doc=self.root/'a.docx';doc.write_bytes(b'x')
+        with self.assertRaisesRegex(ConversionError,'LibreOffice'):convert(self.job('Office → PDF',[doc]))
+        failing=self.tool('fake-soffice','import sys\nsys.exit(3)\n')
+        with self.assertRaisesRegex(ConversionError,'could not convert'):convert(self.job('Office → PDF',[doc],soffice=failing))
+        with self.assertRaisesRegex(ConversionError,'Word, Excel'):convert(self.job('Office → PDF',[self.src],soffice=failing))
+        junk=self.tool('fake-soffice-junk',"import sys\nfrom pathlib import Path\nPath(sys.argv[sys.argv.index('--outdir')+1],'input.pdf').write_bytes(b'not a pdf')\n")
+        with self.assertRaises(Exception):convert(self.job('Office → PDF',[doc],soffice=junk))
+        self.assertFalse(list(self.root.glob('*converted*')))
+    def test_external_tool_deadline(self):
+        from engine import run_external
+        import time
+        start=time.monotonic()
+        with self.assertRaises(ConversionError):run_external([sys.executable,'-c','import time;time.sleep(30)'],time.monotonic()+.3)
+        self.assertLess(time.monotonic()-start,10)
 if __name__=='__main__':unittest.main()

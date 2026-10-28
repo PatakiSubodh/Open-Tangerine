@@ -9,21 +9,62 @@ class UITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
     def test_queue_deduplicates_and_rejects_directory(self):
-        w=Window(global_wheel=False)
+        w=Window()
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'one.png';Image.new('RGB',(8,8)).save(p);w.add_paths([str(p),str(p),d]);self.assertEqual(len(w.paths),1);w.clear_files();self.assertEqual(w.list.count(),0)
         w.close()
     def test_window_and_options(self):
-        w=Window(global_wheel=False);w.show();self.app.processEvents();w.target.setCurrentText('Merge PDFs');self.assertFalse(w.width.isEnabled());w.target.setCurrentText('JPEG');self.assertTrue(w.width.isEnabled());w.close()
+        w=Window();w.show();self.app.processEvents();w.target.setCurrentText('Merge PDFs');self.assertFalse(w.width.isEnabled());w.target.setCurrentText('JPEG');self.assertTrue(w.width.isEnabled());w.close()
+    def test_new_operations_are_listed_and_options_follow_image_targets(self):
+        w=Window()
+        for name in ('HEIC','OCR → Text','Office → PDF'):self.assertGreaterEqual(w.target.findText(name),0,name)
+        w.target.setCurrentText('HEIC');self.assertTrue(w.width.isEnabled());w.target.setCurrentText('OCR → Text');self.assertFalse(w.width.isEnabled());w.close()
+    def test_tools_and_language_are_passed_to_batch(self):
+        w=Window();w.settings.setValue('tesseract','C:/t/tesseract.exe');w.lang.setText('eng+deu')
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'a.png';Image.new('RGB',(8,8)).save(p);w.add_paths([str(p)]);w.start();opts=w.batch.options;w.batch.cancel.set();w.batch.wait(20000)
+        self.assertEqual(opts['tesseract'],'C:/t/tesseract.exe');self.assertEqual(opts['ocr_lang'],'eng+deu');self.assertIn('soffice',opts);w.settings.remove('tesseract');w.close()
+    def test_targets_follow_the_listed_files_and_convert_button_explains_itself(self):
+        w=Window();w.show();self.app.processEvents();self.assertFalse(w.convert.isEnabled())
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'a.srt';p.write_text('1\n00:00:01,000 --> 00:00:02,000\nhi\n');w.add_paths([str(p)])
+            items=[w.target.itemText(i) for i in range(w.target.count())];self.assertIn('SRT → VTT',items);self.assertNotIn('PNG',items)
+            self.assertTrue(w.convert.isEnabled());self.assertIn('1 file to',w.convert.text());w.list.setCurrentRow(0);w.remove_selected();self.assertEqual(w.paths,[])
+        self.assertGreater(w.target.count(),20);w.close()
+    def test_missing_helper_shows_banner_and_blocks_convert(self):
+        from unittest import mock
+        import settings_dialog
+        w=Window();w.show()
+        with tempfile.TemporaryDirectory() as d,mock.patch('engine.find_tool',return_value=None):
+            p=Path(d)/'a.png';Image.new('RGB',(8,8)).save(p);w.add_paths([str(p)]);w.target.setCurrentText('OCR → Text')
+            self.assertTrue(w.banner.isVisible());self.assertFalse(w.convert.isEnabled());self.assertTrue(w.lang.isVisible())
+            w.target.setCurrentText('PNG');self.assertFalse(w.banner.isVisible());self.assertTrue(w.convert.isEnabled());self.assertFalse(w.lang.isVisible())
+        w.close()
+    @unittest.skipUnless(sys.platform=='win32','The wheel is Windows-only')
+    def test_wheel_integration_and_quit(self):
+        w=Window(enable_wheel=True);self.assertIsNotNone(w.wheel);self.assertFalse(hasattr(w,"wheel_box"))
+        w.show();self.app.processEvents();w.quit_app();self.assertFalse(w.wheel.watcher.timer.isActive())
+
+    def test_one_file_choice_appears_for_several_files_and_runs_combined(self):
+        w=Window()
+        with tempfile.TemporaryDirectory() as d:
+            a,b=Path(d)/'a.png',Path(d)/'b.txt';Image.new('RGB',(8,8)).save(a);b.write_text('hi');w.add_paths([str(a)])
+            w.target.setCurrentText('Image → PDF');self.assertTrue(w.combine.isHidden(),'one file: nothing to combine')
+            w.add_paths([str(b)]);w.target.setCurrentText('Files → PDF');self.assertFalse(w.combine.isHidden());self.assertEqual(w.combine.currentText(),'Separate files')
+            self.assertEqual(w.chosen_target(),'Files → PDF');w.combine.setCurrentIndex(1);self.assertEqual(w.chosen_target(),'Combine → PDF');self.assertIn('into one PDF',w.convert.text())
+            w.output=d;w.start();w.batch.wait(60000);self.app.processEvents()
+            self.assertEqual(len(w.outputs),1);self.assertTrue(Path(w.outputs[0]).name.startswith('combined'));Path(w.outputs[0]).unlink();self.assertTrue(all('✓' in w.list.item(i).text() for i in range(2)))
+            w.target.setCurrentText('SHA-256');self.assertTrue(w.combine.isHidden());self.assertEqual(w.chosen_target(),'SHA-256')
+        w.close()
 
 class RegressionUITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
     def test_merge_marks_every_input(self):
-        from app import Batch
-        w=Window(global_wheel=False);w.paths=['/a.pdf','/b.pdf'];w.list.addItems(['a.pdf','b.pdf']);w.batch=Batch(w.paths,'Merge PDFs',{})
+        from batch import Batch
+        w=Window();w.paths=['/a.pdf','/b.pdf'];w.list.addItems(['a.pdf','b.pdf']);w.batch=Batch(w.paths,'Merge PDFs',{})
         w.result(0,'Done',['/merged.pdf'])
-        self.assertTrue(all('Done' in w.list.item(i).text() for i in range(2)));w.close()
+        self.assertTrue(all('✓' in w.list.item(i).text() for i in range(2)));w.batch=None;w.close()
     def test_drag_always_requests_copy(self):
         from PySide6.QtCore import QMimeData,QPoint,QPointF,QUrl,Qt
         from PySide6.QtGui import QDragEnterEvent,QDropEvent
@@ -35,7 +76,6 @@ class RegressionUITests(unittest.TestCase):
             else:view.dropEvent(event)
             self.assertTrue(event.isAccepted());self.assertEqual(event.dropAction(),Qt.CopyAction)
         self.assertEqual(received,[['/tmp/example.png']]);view.close()
-
     def test_move_only_drag_is_rejected(self):
         from PySide6.QtCore import QMimeData,QPoint,QPointF,QUrl,Qt
         from PySide6.QtGui import QDragEnterEvent,QDropEvent
@@ -46,5 +86,27 @@ class RegressionUITests(unittest.TestCase):
         drop=QDropEvent(QPointF(1,1),Qt.MoveAction,mime,Qt.LeftButton,Qt.ShiftModifier)
         view.dragEnterEvent(enter);view.dropEvent(drop)
         self.assertFalse(enter.isAccepted());self.assertFalse(drop.isAccepted());self.assertEqual(received,[]);view.close()
+    def test_close_to_tray_keeps_running_conversion(self):
+        import threading
+        from unittest import mock
+        w=Window();w.show();self.app.processEvents()
+        w.wheel=mock.Mock(tray=mock.Mock(),enabled=True);w.batch=mock.Mock(cancel=threading.Event());w.batch.isRunning.return_value=True
+        w.close();self.app.processEvents()
+        self.assertFalse(w.isVisible());self.assertFalse(w.batch.cancel.is_set())
+        w.wheel=None;w.batch=None;w.close()
+
+
+class DialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):cls.app=QApplication.instance() or QApplication([])
+    def test_colour_dialog_presets_set_the_colour(self):
+        from PySide6.QtGui import QColor
+        import dialogs
+        d=dialogs.ColorDialog(QColor('#ff610a'));self.assertEqual(d.colour().name(),'#ff610a')
+        d.picker.setCurrentColor(QColor(dialogs.SWATCHES[7]));self.assertEqual(d.colour().name(),dialogs.SWATCHES[7]);d.close()
+    def test_info_dialog_and_settings_dialog_build(self):
+        import dialogs,settings_dialog
+        from PySide6.QtCore import QSettings
+        dialogs.InfoDialog('T','intro',[('A','text')]).close();settings_dialog.SettingsDialog(QSettings('Sintax Error Private Limited','Open Tangerine Test')).close()
 
 if __name__=='__main__':unittest.main()

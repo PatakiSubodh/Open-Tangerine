@@ -1,4 +1,4 @@
-import json,os,subprocess,tempfile
+import json,os,subprocess,sys,tempfile
 from pathlib import Path
 from PIL import Image
 root=Path(__file__).resolve().parent
@@ -12,7 +12,46 @@ with tempfile.TemporaryDirectory() as folder:
  if r.returncode!=0:raise RuntimeError(r.stderr or r.stdout)
  data=json.loads(r.stdout);assert data['ok'];out=Path(data['outputs'][0])
  with Image.open(out) as im:assert im.size==(20,20)
-print('PASS: packaged GUI launch and actual PNG to JPEG worker conversion')
+
+ # Native pieces that PyInstaller can silently drop: Qt SVG, libheif and pdfium.
+ def worker(job):
+  r=subprocess.run([str(exe),'--worker'],input=json.dumps(job),text=True,capture_output=True,timeout=60)
+  data=json.loads(r.stdout)
+  if not data['ok']:raise RuntimeError(data['error'])
+  return data['outputs']
+ svg=Path(folder)/'logo.svg';svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="30" height="10"><rect width="30" height="10" fill="red"/></svg>')
+ with Image.open(worker({'paths':[str(svg)],'target':'PNG','output':folder})[0]) as im:assert im.size==(30,10)
+ heic=worker({'paths':[str(p)],'target':'HEIC','output':folder})[0]
+ with Image.open(worker({'paths':[heic],'target':'PNG','output':folder})[0]) as im:assert im.size==(20,20)
+ from pypdf import PdfWriter
+ pdf=Path(folder)/'blank.pdf';w=PdfWriter();w.add_blank_page(100,100);w.write(pdf)
+ # Stand-in Tesseract (we cannot ship the real one): proves the packaged app renders PDF pages with the bundled pdfium.
+ fake=Path(folder)/'fake-tesseract.py';fake.write_text("import sys\nopen(sys.argv[2]+'.txt','w').write('packaged OCR ok')\n")
+ if os.name=='nt':ocr=Path(folder)/'fake-tesseract.bat';ocr.write_text(f'@"{sys.executable}" "{fake}" %*'+chr(13)+chr(10))
+ else:ocr=Path(folder)/'fake-tesseract';ocr.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"'+chr(10));ocr.chmod(0o755)
+ assert 'packaged OCR ok' in Path(worker({'paths':[str(pdf)],'target':'OCR → Text','output':folder,'tesseract':str(ocr)})[0]).read_text(encoding='utf8')
+ from pypdf import PdfReader
+ # Phase 1-4 pieces: AVIF encoder, A4 documents, pdfium page rendering, DOCX writer, text layout.
+ with Image.open(worker({'paths':[str(p)],'target':'AVIF','output':folder})[0]) as im:assert im.size==(20,20)
+ txt=Path(folder)/'note.txt';txt.write_text('hello world')
+ page=PdfReader(worker({'paths':[str(txt)],'target':'Text → PDF','output':folder})[0]).pages[0];assert round(float(page.mediabox.width))==595 and round(float(page.mediabox.height))==842
+ with Image.open(worker({'paths':[str(pdf)],'target':'PDF → PNG','output':folder})[0]) as im:assert im.size[0]>0
+ import zipfile
+ with zipfile.ZipFile(worker({'paths':[str(p)],'target':'Image → DOCX','output':folder})[0]) as z:assert b'w:w="11906"' in z.read('word/document.xml')
+ with Image.open(worker({'paths':[str(p)],'target':'tool:edit_image','output':folder,'params':{'exposure':.4,'vignette':.3,'grain':.2}})[0]) as im:assert im.size==(20,20)
+ # Editing tools run through the same packaged worker.
+ crop=worker({'paths':[str(p)],'target':'tool:crop_image','output':folder,'params':{'rect':[[0,0,.5,.5]]}})[0]
+ with Image.open(crop) as im:assert im.size==(10,10)
+ merged=worker({'paths':[str(pdf),str(pdf)],'target':'tool:merge_pdf','output':folder})[0]
+ from pypdf import PdfReader
+ assert len(PdfReader(merged).pages)==2
+ collage=worker({'paths':[str(p),str(p)],'target':'tool:collage','output':folder,'params':{'columns':2,'cell':100}})[0]
+ with Image.open(collage) as im:assert im.size[0]>200
+ # Separate files to one file: every page lands on A4 whatever its source size.
+ combined=PdfReader(worker({'paths':[str(pdf),str(p),str(txt)],'target':'Combine → PDF','output':folder})[0]).pages
+ assert all(round(float(x.mediabox.width))==595 and round(float(x.mediabox.height))==842 for x in combined) and len(combined)>=3
+ with zipfile.ZipFile(worker({'paths':[str(p),str(txt)],'target':'Combine → DOCX','output':folder})[0]) as z:assert b'w:type="page"' in z.read('word/document.xml')
+print('PASS: packaged GUI launch plus PNG, SVG, HEIC, PDF-render/OCR, combine-to-one-file and editing-tool worker jobs')
 
 # Exercise the FFmpeg subprocess under the packaged worker's Linux resource limits.
 import shutil

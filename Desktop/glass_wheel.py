@@ -15,7 +15,16 @@ class GlassWheel(QWidget):
         self.setMinimumSize(320, 360)
         self.setAccessibleName('Glass conversion wheel')
         self.current = 'PNG'
+        self.dark = False
         self.buttons = []
+        self.set_formats(self.formats)
+
+    def set_formats(self, formats):
+        """Show these targets as panes (the main window passes the first few that fit every listed file)."""
+        formats = tuple(formats) or GlassWheel.formats
+        if formats == tuple(self.formats) and self.buttons: return
+        for button in self.buttons: button.deleteLater()
+        self.formats, self.buttons = formats, []
         for label in self.formats:
             button = QPushButton('', self)
             button.setCheckable(True)
@@ -23,8 +32,15 @@ class GlassWheel(QWidget):
             button.setToolTip('Convert to ' + label)
             button.setCursor(Qt.PointingHandCursor)
             button.clicked.connect(lambda checked=False, value=label: self.selected.emit(value))
+            button.show()
             self.buttons.append(button)
+        self.place_buttons()
         self.set_current(self.current)
+
+    def set_dark(self, dark):
+        """Dark wheel theme: the main window's charcoal and Tangerine orange instead of frosted glass."""
+        self.dark = bool(dark)
+        self.update()
 
     def set_current(self, value):
         self.current = value
@@ -35,13 +51,16 @@ class GlassWheel(QWidget):
     def geometry_scale(self):
         return min(self.width()/380, self.height()/425)
 
-    def resizeEvent(self, event):
+    def place_buttons(self):
         scale = self.geometry_scale()
         left = (self.width()-380*scale)/2
         for index, button in enumerate(self.buttons):
-            angle = math.radians(index * 60 - 90)
+            angle = math.radians(index * 360 / len(self.buttons) - 90)
             button.setGeometry(round(left+(190+math.cos(angle)*123-40)*scale),
                                round((190+math.sin(angle)*123-22)*scale), round(80*scale), round(44*scale))
+
+    def resizeEvent(self, event):
+        self.place_buttons()
         super().resizeEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -56,8 +75,8 @@ class GlassWheel(QWidget):
         scale = self.geometry_scale()
         p.translate((self.width()-380*scale)/2, 0); p.scale(scale, scale)
         selected = self.formats.index(self.current) if self.current in self.formats else -1
-        draw_ring(p, self.formats, selected)
-        draw_hub(p, [self.current] if selected < 0 else self.formats, selected)
+        draw_ring(p, self.formats, selected, dark=self.dark)
+        draw_hub(p, [self.current] if selected < 0 else self.formats, selected, dark=self.dark)
 
 
 WHEEL_STYLE = '''
