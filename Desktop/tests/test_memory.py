@@ -82,5 +82,14 @@ class RealWorker(unittest.TestCase):
     def test_a_real_conversion_under_the_default_limit_works(self):
         info = {};out = runner.run_job(self.job(), info=info);self.assertTrue(Path(out[0]).is_file())
         if WIN: self.assertTrue(info['capped']);self.assertLess(info['peak_memory'], runner.WORKER_MEMORY // 3)
+@unittest.skipUnless(WIN and os.environ.get('OT_SLOW'), 'slow: set OT_SLOW=1 on Windows (40-megapixel encodes)')
+class WorstCase(unittest.TestCase):
+    """The heaviest legitimate jobs must fit with room to spare, or the cap would break real work."""
+    def test_forty_megapixel_avif_and_heic_fit_under_the_default_cap(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / 'big.png';Image.effect_noise((7000, 5700), 60).convert('RGB').save(src)
+            for target in ('AVIF', 'HEIC'):
+                info = {};runner.run_job({'paths': [str(src)], 'target': target, 'output': d}, info=info);print(target, 'peak MiB', info['peak_memory'] // MiB)
+                self.assertLess(info['peak_memory'], runner.WORKER_MEMORY * .6, target)
 
 if __name__ == '__main__': unittest.main()

@@ -7,11 +7,33 @@ VERSION = '0.2.2'
 MAX_BYTES = 100 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 MAX_OUTPUT = 512 * 1024 * 1024
-IMAGE_INPUTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff', '.avif'}
-IMAGE_OUTPUTS = {'PNG': 'png', 'JPEG': 'jpg', 'WEBP': 'webp', 'TIFF': 'tiff', 'BMP': 'bmp'}
-MEDIA_INPUTS = {'.mp4': 'mov', '.mov': 'mov', '.m4v': 'mov', '.mkv': 'matroska', '.webm': 'matroska', '.mp3': 'mp3', '.wav': 'wav', '.flac': 'flac', '.ogg': 'ogg', '.m4a': 'mov', '.aac': 'aac'}
-MEDIA_OUTPUTS = {'MP4': ('mp4', ['-c:v','libx264','-preset','fast','-crf','23','-c:a','aac','-movflags','+faststart']), 'WEBM': ('webm',['-c:v','libvpx-vp9','-deadline','realtime','-cpu-used','6','-c:a','libopus']), 'MP3': ('mp3',['-vn','-c:a','libmp3lame','-b:a','192k']), 'WAV': ('wav',['-vn','-c:a','pcm_s16le']), 'FLAC': ('flac',['-vn','-c:a','flac']), 'OGG': ('ogg',['-vn','-c:a','libvorbis'])}
-OPERATIONS = list(IMAGE_OUTPUTS) + ['Image → PDF', 'PDF → Text', 'Merge PDFs', 'Split PDF', 'SRT → VTT', 'VTT → SRT', 'SHA-256'] + list(MEDIA_OUTPUTS)
+MAX_SVG = 5 * 1024 * 1024
+HEIC_INPUTS = {'.heic', '.heif'}
+SVG_INPUTS = {'.svg'}
+IMAGE_INPUTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff', '.avif'} | HEIC_INPUTS | SVG_INPUTS
+IMAGE_OUTPUTS = {'PNG': 'png', 'JPEG': 'jpg', 'WEBP': 'webp', 'TIFF': 'tiff', 'BMP': 'bmp', 'HEIC': 'heic', 'AVIF': 'avif'}
+MEDIA_INPUTS = {'.mp4': 'mov', '.mov': 'mov', '.m4v': 'mov', '.mkv': 'matroska', '.webm': 'matroska', '.mp3': 'mp3', '.wav': 'wav', '.flac': 'flac', '.ogg': 'ogg', '.m4a': 'mov', '.aac': 'aac',
+               '.gif': 'gif', '.avi': 'avi', '.wmv': 'asf', '.wma': 'asf', '.opus': 'ogg', '.aiff': 'aiff', '.aif': 'aiff'}
+MEDIA_OUTPUTS = {'MP4': ('mp4', ['-c:v','libx264','-preset','fast','-crf','23','-c:a','aac','-movflags','+faststart']), 'WEBM': ('webm',['-c:v','libvpx-vp9','-deadline','realtime','-cpu-used','6','-c:a','libopus']), 'MP3': ('mp3',['-vn','-c:a','libmp3lame','-b:a','192k']), 'WAV': ('wav',['-vn','-c:a','pcm_s16le']), 'FLAC': ('flac',['-vn','-c:a','flac']), 'OGG': ('ogg',['-vn','-c:a','libvorbis']),
+               'GIF': ('gif',['-an','-t','15','-loop','0','-vf',"fps=12,scale='min(480,iw)':-2:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse"]),
+               'MOV': ('mov',['-c:v','libx264','-preset','fast','-crf','23','-pix_fmt','yuv420p','-c:a','aac']),
+               'MKV': ('mkv',['-c:v','libx264','-preset','fast','-crf','23','-pix_fmt','yuv420p','-c:a','aac'],'matroska'),
+               'AVI': ('avi',['-c:v','mpeg4','-q:v','4','-c:a','libmp3lame','-b:a','192k']),
+               'WMV': ('wmv',['-c:v','wmv2','-b:v','2M','-c:a','wmav2','-b:a','192k'],'asf'),
+               'M4A': ('m4a',['-vn','-c:a','aac','-b:a','192k'],'ipod'),
+               'OPUS': ('opus',['-vn','-c:a','libopus','-b:a','128k']),
+               'AIFF': ('aiff',['-vn','-c:a','pcm_s16be']),
+               'WMA': ('wma',['-vn','-c:a','wmav2','-b:a','192k'],'asf')}
+TEXT_INPUTS = {'.txt', '.md', '.log', '.text'}
+DOC_OPERATIONS = ['Image → DOCX', 'PDF → PNG', 'PDF → JPEG', 'PDF → DOCX', 'Text → PDF', 'Text → PNG', 'Text → JPEG', 'Text → SRT', 'Text → VTT', 'Subtitle → Text']
+PAGE_PIXELS = {'a4': (1240, 1754)}          # 150 dpi
+
+def on_page(img, size):
+    """Centre an RGB image on a white page of `size` pixels, shrinking it to leave a margin."""
+    from PIL import Image
+    img.thumbnail((size[0] - 120, size[1] - 120), Image.Resampling.LANCZOS);sheet = Image.new('RGB', size, 'white');sheet.paste(img, ((size[0] - img.width) // 2, (size[1] - img.height) // 2));return sheet
+
+OPERATIONS = list(IMAGE_OUTPUTS) + ['Image → PDF', 'PDF → Text', 'Merge PDFs', 'Split PDF', 'SRT → VTT', 'VTT → SRT', 'SHA-256'] + list(MEDIA_OUTPUTS) + DOC_OPERATIONS
 class ConversionError(ValueError): pass
 MEMORY_MESSAGE='This file needs more memory than a conversion is allowed to use. Try a smaller file or a smaller output size.'
 
@@ -74,16 +96,81 @@ def publish(stage, folder, stem, suffix):
                 raise
     raise ConversionError('Too many existing output names; choose another folder.')
 
-def open_image(p):
+def render_svg(p, width=0):
+    """Rasterize with Qt's SVG renderer; it fetches no network resources."""
+    if p.stat().st_size>MAX_SVG: raise ConversionError('SVG files must be under 5 MiB.')
+    os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
+    from PySide6.QtCore import QByteArray
+    from PySide6.QtGui import QImage, QPainter
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtSvg import QSvgRenderer
+    from PIL import Image
+    QApplication.instance() or QApplication([])
+    renderer=QSvgRenderer(QByteArray(p.read_bytes()))
+    size=renderer.defaultSize()
+    if not renderer.isValid() or size.width()<=0 or size.height()<=0: raise ConversionError('Invalid SVG, or it has no width/height or viewBox.')
+    w,h=size.width(),size.height()
+    if width: scale=width/max(w,h);w,h=max(1,round(w*scale)),max(1,round(h*scale))
+    if w*h>MAX_PIXELS: raise ConversionError('SVG would exceed 40 megapixels; choose a smaller maximum side.')
+    canvas=QImage(w,h,QImage.Format_ARGB32_Premultiplied);canvas.fill(0)
+    painter=QPainter(canvas);renderer.render(painter);painter.end()
+    canvas=canvas.convertToFormat(QImage.Format_RGBA8888)
+    return Image.frombuffer('RGBA',(w,h),bytes(canvas.constBits()),'raw','RGBA',canvas.bytesPerLine(),1).copy()
+
+def open_image(p, width=0):
     from PIL import Image, ImageOps
+    suffix=p.suffix.lower()
+    if suffix in SVG_INPUTS: return render_svg(p,width)
+    if suffix in HEIC_INPUTS:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
     Image.MAX_IMAGE_PIXELS=MAX_PIXELS
     warnings.simplefilter('error', Image.DecompressionBombWarning)
     with Image.open(p) as im:
         if im.width*im.height>MAX_PIXELS: raise ConversionError('Image exceeds 40 megapixels.')
-        if getattr(im,'n_frames',1)!=1: raise ConversionError('Animated or multipage images are not supported; use a single-frame image.')
+        # HEIC may bundle extra images (bursts, depth); only the primary image is converted.
+        if suffix not in HEIC_INPUTS and getattr(im,'n_frames',1)!=1: raise ConversionError('Animated or multipage images are not supported; use a single-frame image.')
         im.load()
         result=ImageOps.exif_transpose(im).copy()
     return result
+
+TOOLS = {  # settings key -> (display name, executable names, install hint)
+    'ffmpeg': ('FFmpeg', ['ffmpeg'], 'winget install Gyan.FFmpeg')}
+
+def _tool_dirs(key):
+    """Standard install folders. PATH is searched separately, and only through absolute entries (never the current folder)."""
+    env=os.environ.get;pf=[env('ProgramFiles',r'C:\Program Files'),env('ProgramFiles(x86)',r'C:\Program Files (x86)')];local=env('LOCALAPPDATA','')
+    if os.name=='nt':
+        winget=Path(local)/'Microsoft'/'WinGet'
+        found=[winget/'Links']+[b for pkg in sorted((winget/'Packages').glob('*FFmpeg*')) for b in pkg.glob('**/bin')]
+        return found+[Path(d)/'ffmpeg'/'bin' for d in pf]+[Path(r'C:\ffmpeg\bin'),Path(env('ProgramData',r'C:\ProgramData'))/'chocolatey'/'bin']
+    return [Path(d) for d in ('/usr/bin','/usr/local/bin','/opt/homebrew/bin','/snap/bin')]
+
+def find_tool(key):
+    """Locate a helper on PATH or in its usual install folder. Returns a resolved absolute Path or None."""
+    exts=['.exe','.bat','.cmd'] if os.name=='nt' else ['']
+    path_dirs=[Path(d) for d in os.environ.get('PATH','').split(os.pathsep) if d and Path(d).is_absolute()]
+    for folder in path_dirs+_tool_dirs(key):
+        for name in TOOLS[key][1]:
+            for ext in exts:
+                try:
+                    candidate=folder/(name+ext)
+                    # Shims such as WinGet's Links folder are symlinks; follow them once, then validate the real file.
+                    if candidate.is_file() and os.access(candidate,os.X_OK): return candidate.resolve(strict=True)
+                except OSError: continue
+    return None
+
+def tool_path(raw, name, key=None):
+    """A user-chosen executable wins; otherwise fall back to an installed copy if one can be found."""
+    if not raw and key:
+        found=find_tool(key)
+        if found: return found
+    if not raw:
+        hint=TOOLS[key][2] if key in TOOLS else ''
+        raise ConversionError(f'{name} was not found. Install it'+(f' (for example: {hint})' if hint and os.name=='nt' else '')+', then pick it in Settings if it is not detected automatically.')
+    exe=Path(raw)
+    if not exe.is_absolute() or not exe.is_file() or exe.is_symlink(): raise ConversionError(f'{name} must be an existing absolute executable path.')
+    return exe
 
 def read_pdf(p):
     from pypdf import PdfReader
@@ -93,13 +180,12 @@ def read_pdf(p):
     return pdf
 
 def media(p, stage, target, ffmpeg):
-    if not ffmpeg: raise ConversionError('Choose a trusted FFmpeg executable in Settings for audio/video conversion.')
-    exe=Path(ffmpeg)
-    if not exe.is_absolute() or not exe.is_file() or exe.is_symlink(): raise ConversionError('FFmpeg must be an existing absolute executable path.')
+    exe=tool_path(ffmpeg,'FFmpeg','ffmpeg')
     if p.suffix.lower() not in MEDIA_INPUTS: raise ConversionError('Unsupported media input; playlists and URLs are not accepted.')
-    ext,args=MEDIA_OUTPUTS[target]
+    ext,args,*rest=MEDIA_OUTPUTS[target];muxer=rest[0] if rest else ext
+    if p.suffix.lower()=='.gif' and ext!='gif': args=['-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-pix_fmt','yuv420p',*args]
     # Input demuxer selected explicitly; network protocols unavailable to the job.
-    cmd=[str(exe),'-nostdin','-hide_banner','-loglevel','error','-n','-protocol_whitelist','file,pipe','-threads','1','-filter_threads','1','-filter_complex_threads','1','-f',MEDIA_INPUTS[p.suffix.lower()],'-i',str(p),'-map_metadata','-1','-threads','1',*args,'-fs',str(MAX_OUTPUT),'-f',ext,str(stage)]
+    cmd=[str(exe),'-nostdin','-hide_banner','-loglevel','error','-n','-protocol_whitelist','file,pipe','-threads','1','-filter_threads','1','-filter_complex_threads','1','-f',MEDIA_INPUTS[p.suffix.lower()],'-i',str(p),'-map_metadata','-1','-threads','1',*args,'-fs',str(MAX_OUTPUT),'-f',muxer,str(stage)]
     with tempfile.TemporaryFile() as log:
         proc=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=log)
         start=time.monotonic()
@@ -135,19 +221,23 @@ def convert(job):
         if target in IMAGE_OUTPUTS or target=='Image → PDF':
             if p.suffix.lower() not in IMAGE_INPUTS: raise ConversionError('This operation requires a supported image.')
             from PIL import Image
-            im=open_image(p)
+            width=int(job.get('width',0));rotation=int(job.get('rotation',0));quality=int(job.get('quality',90))
+            if not 0<=width<=10000 or rotation not in (0,90,180,270) or not 1<=quality<=100: raise ConversionError('Invalid image options.')
+            im=open_image(p,width)
             try:
-                width=int(job.get('width',0));rotation=int(job.get('rotation',0));quality=int(job.get('quality',90))
-                if not 0<=width<=10000 or rotation not in (0,90,180,270) or not 1<=quality<=100: raise ConversionError('Invalid image options.')
                 if width: im.thumbnail((width,width),Image.Resampling.LANCZOS)
                 if rotation: im=im.rotate(-rotation,expand=True)
                 if target in ('JPEG','BMP','Image → PDF'):
                     rgba=im.convert('RGBA');base=Image.new('RGB',rgba.size,'white');base.paste(rgba,mask=rgba.getchannel('A'));im=base
-                elif im.mode not in ('RGB','RGBA','L','LA'): im=im.convert('RGBA')
+                elif im.mode not in (('RGB','RGBA','L') if target in ('HEIC','AVIF') else ('RGB','RGBA','L','LA')): im=im.convert('RGBA')
+                if target in ('HEIC','AVIF'):
+                    import pillow_heif
+                    pillow_heif.register_heif_opener()
                 # Drop ancillary metadata; this is not a certified anonymizer.
                 im.info.clear()
-                fmt='PDF' if target=='Image → PDF' else target
-                im.save(stage,format=fmt,quality=quality)
+                if target=='Image → PDF': im=on_page(im,PAGE_PIXELS['a4'])
+                fmt='PDF' if target=='Image → PDF' else 'HEIF' if target=='HEIC' else target
+                im.save(stage,format=fmt,quality=quality,**({'resolution':150} if fmt=='PDF' else {}))
                 ext='pdf' if fmt=='PDF' else IMAGE_OUTPUTS[target]
                 results.append(publish(stage,folder,stem,ext))
             finally: im.close()
@@ -179,6 +269,9 @@ def convert(job):
                         pieces.append(item)
                         if sum(x.stat().st_size for x in pieces)>MAX_OUTPUT: raise ConversionError('Split outputs exceed 512 MiB.')
                     for i,item in enumerate(pieces):results.append(publish(item,folder,f'{p.stem}-page-{i+1}','pdf'))
+        elif target in DOC_OPERATIONS:
+            import docops
+            results.extend(docops.dispatch(target,p,work,stage,folder,stem))
         elif target in MEDIA_OUTPUTS:
             media(p,stage,target,job.get('ffmpeg',''));results.append(publish(stage,folder,stem,MEDIA_OUTPUTS[target][0]))
         elif target=='SHA-256':

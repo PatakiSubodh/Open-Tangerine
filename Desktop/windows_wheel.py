@@ -26,7 +26,7 @@ def available_formats(paths, ffmpeg=False):
     if suffixes == {'.vtt'}:
         return ['VTT → SRT']
     if suffixes <= MEDIA_INPUTS.keys() and ffmpeg:
-        audio = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'}
+        audio = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.aiff', '.aif'}
         return list(MEDIA_OUTPUTS) if not suffixes & audio else ['MP3', 'WAV', 'FLAC', 'OGG']
     return []
 

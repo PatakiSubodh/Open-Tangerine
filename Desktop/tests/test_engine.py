@@ -1,3 +1,4 @@
+from unittest import mock
 import concurrent.futures, hashlib, json, os, shutil, subprocess, sys, tempfile, threading, unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -8,6 +9,8 @@ from pypdf import PdfReader, PdfWriter
 
 class ConversionTests(unittest.TestCase):
     def setUp(self):
+        # Tests must not pick up helper programs installed on the developer's machine.
+        patcher=mock.patch('engine.find_tool',return_value=None);patcher.start();self.addCleanup(patcher.stop)
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name).resolve();self.src=self.root/'源 image ; $danger.png';Image.new('RGBA',(32,24),(255,0,0,128)).save(self.src)
     def tearDown(self):self.tmp.cleanup()
     def job(self,target,paths=None,**kw):return dict(paths=[str(p) for p in (paths or [self.src])],target=target,output=str(self.root),**kw)
@@ -35,6 +38,8 @@ class ConversionTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:out=list(pool.map(lambda _:publish(stage,self.root,'same','txt'),range(20)))
         self.assertEqual(len(set(out)),20);self.assertTrue(all(Path(p).read_bytes()==b'safe' for p in out))
     def test_image_pdf(self):self.assertEqual(len(PdfReader(convert(self.job('Image → PDF'))[0]).pages),1)
+    def test_image_pdf_is_a4(self):
+        page=PdfReader(convert(self.job('Image → PDF'))[0]).pages[0];self.assertAlmostEqual(float(page.mediabox.width),595.2,delta=1);self.assertAlmostEqual(float(page.mediabox.height),842.0,delta=1)
     def test_pdf_merge_split_text(self):
         a=self.pdf();b=self.pdf('two.pdf',1);merged=convert(self.job('Merge PDFs',[a,b]))[0];self.assertEqual(len(PdfReader(merged).pages),3)
         pages=convert(self.job('Split PDF',[a]));self.assertEqual(len(pages),2);self.assertTrue(all(len(PdfReader(p).pages)==1 for p in pages))
@@ -119,4 +124,30 @@ class ConversionTests(unittest.TestCase):
         with self.assertRaisesRegex(ConversionError,'Animated'):convert(self.job('JPEG',[p]))
     def test_batch_limit(self):
         with self.assertRaises(ConversionError):convert(self.job('Merge PDFs',[self.src]*101))
+    def test_heic_roundtrip(self):
+        heic=Path(convert(self.job('HEIC'))[0]);self.assertEqual(heic.suffix,'.heic')
+        back=Path(convert(self.job('PNG',[heic]))[0])
+        with Image.open(back) as im:self.assertEqual(im.size,(32,24))
+    def test_heic_corrupt(self):
+        p=self.root/'bad.heic';p.write_bytes(b'not heic at all')
+        with self.assertRaises(Exception):convert(self.job('PNG',[p]))
+        self.assertFalse(list(self.root.glob('*converted*')))
+    def svg(self,body='<rect width="40" height="20" fill="#ff0000"/>',size='width="40" height="20"'):
+        p=self.root/'drawing.svg';p.write_text(f'<svg xmlns="http://www.w3.org/2000/svg" {size}>{body}</svg>');return p
+    def test_svg_to_png_pdf_and_size(self):
+        p=self.svg()
+        with Image.open(convert(self.job('PNG',[p]))[0]) as im:self.assertEqual(im.size,(40,20));self.assertEqual(im.convert('RGBA').getpixel((5,5)),(255,0,0,255))
+        with Image.open(convert(self.job('PNG',[p],width=80))[0]) as im:self.assertEqual(im.size,(80,40))
+        self.assertEqual(len(PdfReader(convert(self.job('Image → PDF',[p]))[0]).pages),1)
+    def test_svg_transparent_background_and_jpeg_white(self):
+        p=self.svg('<rect width="10" height="20" fill="#00f"/>')
+        with Image.open(convert(self.job('PNG',[p]))[0]) as im:self.assertEqual(im.convert('RGBA').getpixel((30,10))[3],0)
+        with Image.open(convert(self.job('JPEG',[p]))[0]) as im:self.assertGreater(min(im.getpixel((30,10))),240)
+    def test_svg_limits(self):
+        with self.assertRaisesRegex(ConversionError,'40 megapixels'):convert(self.job('PNG',[self.svg(size='width="20000" height="20000"')]))
+        p=self.svg();p.write_text(p.read_text()+'<!--'+'x'*(5*1024*1024)+'-->')
+        with self.assertRaisesRegex(ConversionError,'5 MiB'):convert(self.job('PNG',[p]))
+    def test_tool_detection_ignores_relative_path_entries(self):
+        import engine
+        with mock.patch.dict(os.environ,{'PATH':'relative-dir'}),mock.patch('engine._tool_dirs',return_value=[]):self.assertIsNone(engine.find_tool('ffmpeg'))
 if __name__=='__main__':unittest.main()

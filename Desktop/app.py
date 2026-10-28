@@ -1,6 +1,6 @@
 """Open Tangerine desktop trial for Windows and Linux."""
 import sys
-# Worker never imports Qt, creates a window or recursively starts the app.
+# Worker never creates the app window or recursively starts the app (SVG rendering uses headless Qt).
 if '--worker' in sys.argv:
     from engine import worker_main
     raise SystemExit(worker_main())
@@ -100,7 +100,7 @@ class Window(QMainWindow):
         self.settings.setValue('shiftWheel',enabled)
         self.shift_wheel.set_enabled(enabled)
     def update_options(self):
-        enabled=self.target.currentText() in ['PNG','JPEG','WEBP','TIFF','BMP','Image → PDF'];self.width.setEnabled(enabled);self.rotate.setEnabled(enabled)
+        enabled=self.target.currentText() in ['PNG','JPEG','WEBP','TIFF','BMP','HEIC','AVIF','Image → PDF'];self.width.setEnabled(enabled);self.rotate.setEnabled(enabled)
     def add_paths(self,paths):
         if self.batch and self.batch.isRunning():return
         errors=[]
@@ -123,7 +123,7 @@ class Window(QMainWindow):
             self.settings.setValue('ffmpeg',str(Path(path).resolve()));self.status.setText('FFmpeg selected. It runs only when you request media conversion.')
     def ffmpeg_path(self):return self.settings.value('ffmpeg','')
     def show_limits(self):
-        QMessageBox.information(self,'Trial capabilities','Images: PNG, JPEG, WebP, TIFF, BMP output; PNG/JPEG/WebP/TIFF/BMP/AVIF input. Resize and rotate. Single-frame only; 40 megapixels. HEIC and SVG are not supported in this trial.\n\nPDF: image to PDF, merge (up to 200 pages), split and extract text. No OCR, Word conversion or password-protected PDFs.\n\nMedia: MP4/WebM/MP3/WAV/FLAC/Ogg using a separately selected FFmpeg. Codecs depend on your installation. No FFmpeg download is performed.\n\nSimple SRT/VTT conversion and SHA-256 checksums.\n\nWorkers have time/output limits but are not an operating-system security sandbox. Process trusted files. Archives and the Mac notch are not included. Windows offers an opt-in Explorer/Desktop Shift drag wheel and tray mode; Linux uses the app window. Failed files do not stop the batch.')
+        QMessageBox.information(self,'Trial capabilities','Images: PNG, JPEG, WebP, AVIF, TIFF, BMP and HEIC output; PNG/JPEG/WebP/TIFF/BMP/AVIF/HEIC/SVG input. Resize and rotate. Single-frame only (HEIC: primary image); 40 megapixels; SVG under 5 MiB. RAW is not supported.\n\nDocuments: image to PDF or DOCX (A4 pages), merge PDFs (up to 200 pages), split, extract text, pages to PNG/JPEG, PDF to DOCX. Text files to PDF, PNG, JPEG, SRT or VTT. No OCR or password-protected PDFs.\n\nMedia: MP4, WebM, MOV, MKV, AVI, WMV, GIF, MP3, M4A, WAV, FLAC, Ogg, Opus, AIFF and WMA using a separately installed FFmpeg, found automatically or chosen with Set FFmpeg. Codecs depend on your installation. No FFmpeg download is performed.\n\nSRT/VTT conversion (also to plain text) and SHA-256 checksums.\n\nWorkers have time/output limits but are not an operating-system security sandbox. Process trusted files. Archives and the Mac notch are not included. Windows offers an opt-in Explorer/Desktop Shift drag wheel and tray mode; Linux uses the app window. Failed files do not stop the batch.')
     def start(self):
         if not self.paths or (self.batch and self.batch.isRunning()):return
         self.batch_errors=[]

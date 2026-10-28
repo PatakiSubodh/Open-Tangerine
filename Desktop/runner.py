@@ -6,7 +6,7 @@ from contextlib import ExitStack
 from engine import MEMORY_MESSAGE, output_folder
 import winjob
 
-# Committed memory allowed to one worker and everything it starts. It leaves ample room over the heaviest legitimate jobs (40-megapixel images).
+# Committed memory allowed to one worker and everything it starts. The largest legitimate jobs measured (a 40-megapixel image to AVIF or HEIC) peak near 1.4 GiB.
 WORKER_MEMORY=3*1024**3
 
 class Cancelled(Exception): pass

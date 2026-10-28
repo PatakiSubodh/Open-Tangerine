@@ -30,7 +30,8 @@ class WheelTests(unittest.TestCase):
         self.assertIn('Merge PDFs', available_formats(['a.pdf', 'b.pdf']))
         self.assertEqual(available_formats(['a.srt']), ['SRT → VTT'])
         self.assertEqual(available_formats(['a.vtt']), ['VTT → SRT'])
-        self.assertEqual(available_formats(['a.svg']), [])
+        self.assertIn('PNG', available_formats(['a.svg']))
+        self.assertEqual(available_formats(['a.opus'], True), ['MP3', 'WAV', 'FLAC', 'OGG'])
         self.assertEqual(available_formats(['file.docx']), [])
         self.assertEqual(available_formats(['a.png'] * 101), [])
 
@@ -40,8 +41,8 @@ class WheelTests(unittest.TestCase):
         self.assertFalse(w.mask().contains(QPoint(190, 190)))
         self.assertEqual(w.sector(QPointF(190, 190)), -1)
         self.assertEqual(w.sector(QPointF(0, 0)), -1)
-        for i in range(6):
-            angle = math.radians(i*60-90)
+        for i in range(len(w.formats)):
+            angle = math.radians(i*360/len(w.formats)-90)
             self.assertEqual(w.sector(QPointF(190+120*math.cos(angle),
                                               190+120*math.sin(angle))), i)
         w.close()
