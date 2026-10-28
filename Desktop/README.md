@@ -1,4 +1,4 @@
-# Open Tangerine — Windows and Linux trial 0.2.2
+# Open Tangerine — Windows and Linux trial 0.3.0
 
 This is an early cross-platform desktop edition, not a port of every Mac feature.
 No account, telemetry, uploads, administrator service or automatic downloads.
