@@ -233,7 +233,7 @@ class DocxTests(unittest.TestCase):
         app = QApplication.instance() or QApplication([])
         bad = self.root/'bad.docx'; bad.write_bytes(b'not a zip at all')
         good = self.docx(para(run('fine')), name='good.docx')
-        window = Window(global_wheel=False); window.add_paths([str(bad), str(good)])
+        window = Window(); window.output = str(self.root); window.add_paths([str(bad), str(good)])
         window.target.setCurrentText('DOCX → Text'); window.start()
         loop = QEventLoop(); window.batch.finished.connect(loop.quit)
         QTimer.singleShot(20000, loop.quit); loop.exec(); app.processEvents()

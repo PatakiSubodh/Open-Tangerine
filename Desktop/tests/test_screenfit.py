@@ -20,7 +20,9 @@ class ScreenFitTests(unittest.TestCase):
         from app import Window
         import inspect
         params = inspect.signature(Window.__init__).parameters
-        return Window(**({'enable_wheel': False} if 'enable_wheel' in params else {'global_wheel': False}))
+        # Whichever switch this version of the window has for the Windows drag wheel; off in tests.
+        flag = next((name for name in ('enable_wheel', 'global_wheel') if name in params), None)
+        return Window(**({flag: False} if flag else {}))
 
     def test_keeps_preferred_size_on_a_large_screen(self):
         self.assertEqual(screenfit.fitted_size(960, 700, QRect(0, 0, 2560, 1400)), (960, 700))
@@ -56,6 +58,26 @@ class ScreenFitTests(unittest.TestCase):
         screenfit.shrink_to(window, FakeScreen(QRect(0, 0, 800, 450)))
         size = QWidget.size(window)
         self.assertLessEqual(size.width(), 800); self.assertLessEqual(size.height(), 450)
+        window.close()
+
+    def test_secondary_windows_can_shrink_to_small_screens(self):
+        import settings_dialog, dialogs
+        window = self.make_window()
+        for dialog in (settings_dialog.SettingsDialog(window.settings, window),
+                       dialogs.InfoDialog('Supported formats', 'intro', [('Images', 'text ' * 80)] * 8, window)):
+            dialog.show(); self.app.processEvents()
+            hint = dialog.minimumSizeHint().expandedTo(dialog.minimumSize())
+            self.assertLessEqual(hint.width(), 640, type(dialog).__name__)
+            self.assertLessEqual(hint.height(), 360, type(dialog).__name__)
+            dialog.close()
+        window.close()
+
+    def test_window_is_moved_fully_onto_its_screen(self):
+        window = self.make_window(); window.show(); self.app.processEvents()
+        area = window.screen().availableGeometry()
+        window.move(area.right() - 50, area.bottom() - 50)
+        screenfit.keep_on_screen(window)
+        self.assertTrue(area.contains(window.frameGeometry()))
         window.close()
 
 
