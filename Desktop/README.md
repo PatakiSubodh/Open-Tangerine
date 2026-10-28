@@ -12,13 +12,7 @@ No account, telemetry, uploads, administrator service or automatic downloads.
 
 ## Use
 
-Drop local files **into the app window**, or click Add files. Choose an output on the glass wheel beside the list (contributed by @VandanPatell in #2; its panes follow the files you add) or in the Convert to list, then Convert. Multiple files are processed sequentially; a failure does not stop later files. Outputs go where **Settings** says (beside the originals by default), or into a folder you pick for that run. Existing files are never replaced. Completed outputs remain if a batch is cancelled. Per-file rows show failures.
-
-**Settings** (footer of the main window) has three pages. *General*: where converted files go (next to the original, Downloads, Desktop or a folder you choose), whether to show the results in Explorer when a conversion finishes (off by default) and the **theme**. *Formats*: FFmpeg, Tesseract and LibreOffice, each showing Ready with its version, Cannot run with the reason, or Not found with the install command; you can also choose the program yourself. *About*: version, updates, privacy and source links.
-
-The glass wheel has two themes, chosen in **Settings → General → Appearance → Theme** and saved until you change them: **Light** (default), frosted glass, and **Dark**, the main window's charcoal and Tangerine orange.
-
-The experimental Explorer Shift wheel and tray mode of 0.2.2 are not in this build; a new drag wheel replaces them.
+Drop local files **into the app window**, or click Add files. Choose an output on the glass wheel beside the list (contributed by @VandanPatell in #2; its panes follow the files you add) or in the Convert to list, then Convert. Multiple files are processed sequentially; a failure does not stop later files. Outputs go where Settings says (beside the originals by default), or into a folder you pick for that run. Existing files are never replaced. Completed outputs remain if a batch is cancelled. Per-file rows show failures.
 
 Images: PNG, JPEG, WebP, AVIF, TIFF, BMP and HEIC output; PNG/JPEG/WebP/TIFF/BMP/AVIF/HEIC/SVG input. JPEG transparency is flattened against white. Optional maximum-side resizing and clockwise rotation. Animated and multipage images are rejected instead of silently discarding frames; for HEIC only the primary image is converted. SVG is rasterized by Qt at its own size (or scaled to the maximum side), keeping transparency for PNG/WebP/TIFF/HEIC; SVG files must be under 5 MiB. RAW is not supported.
 
@@ -31,6 +25,30 @@ PDF: image to PDF, merge, split into single-page files, extract existing text, r
 Word: **DOCX → Text** and **DOCX → PDF (text only)** extract the body paragraphs and table rows of a `.docx` (table cells become tab-separated columns). Formatting, images, text boxes, explicitly hidden runs, headers, footers, footnotes, comments and deleted tracked changes are not kept; inserted tracked changes are. The PDF lays that text out on A4 pages in the standard Helvetica font, so it supports Western European Latin text only: documents with other scripts are rejected with the first unsupported character named, and DOCX → Text keeps them. Long table cells can push later columns past their tab stop. The package is read in memory with size limits and is never extracted to disk; DTD/entity declarations, macro-enabled, encrypted and legacy `.doc` files are rejected. Not a sanitizer: it does not open links or embedded objects, and the output contains only text. PDF operations can retain active content/links; this is not a PDF sanitizer.
 
 Media: MP4, WebM, MOV, MKV, AVI, WMV, animated GIF (at most 15 s, 480 px wide, 12 fps), MP3, M4A, WAV, FLAC, Ogg, Opus, AIFF and WMA output from supported local audio/video inputs. Needs a **separately installed FFmpeg** (found automatically, or chosen in **Settings**). The app does not install or bundle it. Codec support depends on that installation (for example libopus, wmav2 and libx264). GIF input converts to MP4, WebM, MOV, MKV, AVI or WMV; animated GIF to images is rejected. No playlists or network URLs. Basic SRT/VTT subtitle conversion and SHA-256 file checksums are also included.
+
+## Drag wheel (Windows): convert, tools and file actions
+
+The drag wheel is **off until you turn it on**: **Settings → General → Drag wheel**, or the tray menu. Then start dragging files from Explorer, the desktop or an Open/Save dialog, and hold a key. A wheel of tiles blooms under the cursor; the tile you hover lifts and turns orange, and the centre names it. Release over one.
+
+| Hold while dragging | Wheel | What the tiles do |
+|---|---|---|
+| **Shift** | Convert | Convert to a format (images, PDFs, Office files, media, subtitles, or what the whole selection has in common) |
+| **Alt** (or Alt+Shift) | Tools | Open an editing tool for the files: crop, trim, compress, merge and more (below) |
+| **Ctrl+Shift** | File actions | Reveal in Explorer, Copy files, Copy paths, Duplicate, SHA-256 to the clipboard |
+
+Alt is the Windows stand-in for the Mac's Command key (it sits in the same place on the keyboard) and is rarely used in Explorer drags. **Ctrl on its own is deliberately not a trigger**, because Ctrl+drag is Explorer's normal copy gesture and would pop the wheel up constantly. You do not need the keys at all: the **Convert / Tools / Actions tabs** under the wheel switch mode as you hover them while dragging, and the wheel stays up when you let go of the key (as on the Mac). Without dragging, the tray menu (**Convert files… / Tools for files… / File actions…**) and the **Edit tools…** button in the main window do the same from a file picker; there you click a tile instead of dropping.
+
+Conversions are saved where **Settings → General** says (beside the originals by default). By default their progress appears in the **progress island** at the top centre of the screen under the pointer, the Windows stand-in for the Mac notch: successful results show **Open** (single file) or **Show folder** and retract after two seconds; failures stay until dismissed. **Settings → General → Drag wheel → Conversion progress** chooses the island (pure black or glass) or the **progress card**. File actions always use the card. The progress card shows the work: a progress bar with a percentage, then the result or the first error. The title and the whole description wrap instead of being cut off, and the card grows to fit. Finished messages stay for at least their reading time (6 s for success, 15 s for errors, longer for long messages); hovering pauses the countdown, shown as a thin line along the bottom. **Open folder**, **Copy details** (errors) and **×** are buttons on the card. Choose where it appears in **Settings → General → Drag wheel → Progress card**: top left, top centre (default), top right, bottom left or bottom right. Dropping in the centre, off the tiles or on a tab does nothing.
+
+The app lives in the system tray (right-click for the on/off switch, *Also trigger from other apps* (off by default) and *Start with Windows*; the same switches are in **Settings → General**). While the wheel is enabled, closing the window hides it to the tray; choose **Quit** in the tray menu to exit.
+
+**Settings** (footer of the main window) has three pages. *General*: where converted files go (next to the original, Downloads, Desktop or a folder you choose), whether to show the results in Explorer when a conversion finishes (off by default), the **wheel theme**, start with Windows, the drag wheel and trigger from other apps, and **Excluded applications**: add a program's `.exe` and a drag that starts in it never opens the wheel (it is checked when you press the mouse button, so changing focus mid-drag cannot bypass it, and a change applies to the next drag). *Formats*: FFmpeg, Tesseract and LibreOffice, each showing Ready with its version, Cannot run with the reason, or Not found with the install command. *About*: version, updates, privacy and source links. There is no notch style as on the Mac.
+
+The wheels have two themes, chosen in **Settings → General → Appearance → Wheel theme** and saved until you change them: **Light** (default), frosted glass, and **Dark**, the main window's charcoal and Tangerine orange. The theme applies to the glass wheel beside the file list on Windows and Linux, and to the drag wheel and progress card on Windows. The progress card follows the same theme. Both scale with display scaling and use time-based animation so they run smoothly at any refresh rate (checked on a 1920x1080, 125% scaling, 144 Hz panel). The surfaces are painted by the app, so they need no special graphics support.
+
+How it works: a 25 ms timer reads whether the left mouse button and the Shift, Alt and Ctrl modifiers are down, the cursor position, and the class of the window under the cursor at the moment you press. **No keyboard or mouse hooks are installed and no keystrokes are read.** The wheel is an ordinary drop target, so Windows hands it the real file paths on release. It always answers *Copy*; Shift normally means *Move* in Explorer, and the wheel never lets the source remove your originals.
+
+Limitations: the wheel also appears for a Shift or Alt rubber-band selection on empty space in Explorer (releasing there does nothing). Dragging from browsers or mail clients needs *Also trigger from other apps*, which can also show it for Shift+text selection. Windows blocks a normal-privilege app from interacting with elevated (administrator) windows. Wheel conversions use your saved tool paths and OCR language, and run one drop at a time. Not implemented: the physical Mac notch. Linux has no drag wheel; the glass wheel beside the file list and the **Edit tools…** button in the window work there.
 
 ## Tools
 
@@ -65,6 +83,8 @@ python package.py
 ```
 
 Build separately on Windows and Linux. The CI tests conversion, corruption, limits, naming collisions, original-file preservation, cancellation, timeouts and Qt window startup before packaging. Packaged executables receive a startup and real conversion smoke test. Automated CI does not establish compatibility with every desktop, GPU, codec or antivirus product.
+
+Linux GUI packaging is exercised with the real xcb plugin under Xvfb; this does not verify every physical desktop or Wayland compositor.
 
 Source: https://github.com/sintaxerrorpvtltd/Open-Tangerine/tree/main/Desktop
 Downloads: https://sintaxerrorpvtltd.github.io/Open-Tangerine/#desktop

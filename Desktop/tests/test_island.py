@@ -123,5 +123,72 @@ class IslandTests(unittest.TestCase):
         self.assertEqual(island.phase, 'running')
         island.stop(); window.close()
 
+
+class WheelIslandTests(unittest.TestCase):
+    """The drag wheel reports conversions in the island, or in the card when that is chosen in Settings."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from PySide6.QtCore import QSettings
+        self.still = patch('island.animations_enabled', return_value=False); self.still.start()
+        self.addCleanup(self.still.stop)
+        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name).resolve()
+        self.settings = QSettings(str(self.dir / 's.ini'), QSettings.IniFormat)
+
+    def controller(self):
+        import wheel
+        c = wheel.WheelController(self.settings); self.addCleanup(c.shutdown)
+        return c
+
+    def run_batch(self, c, paths, target):
+        c.convert([str(p) for p in paths], target)
+        loop = QEventLoop(); c.batch.finished.connect(loop.quit)
+        timeout = QTimer(); timeout.setSingleShot(True); timeout.timeout.connect(loop.quit); timeout.start(15000)
+        loop.exec(); timeout.stop(); self.app.processEvents()
+        self.assertFalse(c.batch.isRunning())
+
+    def images(self, *names):
+        from PIL import Image
+        paths = [self.dir / name for name in names]
+        for path in paths: Image.new('RGB', (8, 8), 'orange').save(path)
+        return paths
+
+    def test_new_installs_use_the_island_and_old_settings_carry_over(self):
+        import prefs, island
+        self.assertEqual(prefs.wheel_progress(self.settings), 'Pure black')
+        self.settings.setValue('islandStyle', 'Glass'); self.assertEqual(prefs.wheel_progress(self.settings), 'Glass')
+        self.settings.setValue('islandStyle', 'Off'); self.assertEqual(prefs.wheel_progress(self.settings), 'card')
+        self.settings.setValue('wheel/progress', 'Pure black'); self.assertEqual(prefs.wheel_progress(self.settings), 'Pure black')
+        self.assertEqual(set(prefs.ISLAND_STYLES) | {'Off'}, set(island.STYLES))
+
+    def test_wheel_success_shows_island_then_retracts(self):
+        c = self.controller()
+        self.run_batch(c, self.images('a.png', 'b.png'), 'JPEG')
+        self.assertTrue(c.island.isVisible()); self.assertEqual(c.island.phase, 'done')
+        self.assertEqual(c.island.title.text(), 'Converted 2 files to JPEG')
+        self.assertEqual(len(c.island.outputs), 2); self.assertFalse(c.notch.isVisible())
+        self.assertTrue(c.island.retract_timer.isActive())
+        c.island.retract_timer.timeout.emit(); self.assertFalse(c.island.isVisible())
+
+    def test_wheel_failure_stays_until_dismissed(self):
+        c = self.controller()
+        bad = self.dir / 'bad.png'; bad.write_bytes(b'broken')
+        self.run_batch(c, [bad], 'JPEG')
+        self.assertEqual(c.island.phase, 'failed'); self.assertTrue(c.island.isVisible())
+        self.assertEqual(c.island.detail.text(), c.batch_errors[0])
+        self.assertFalse(c.island.retract_timer.isActive())
+        c.island.dismiss_button.click(); self.assertFalse(c.island.isVisible())
+
+    def test_card_choice_reports_conversions_in_the_card(self):
+        c = self.controller(); c.set_progress('card')
+        self.run_batch(c, self.images('a.png'), 'JPEG')
+        self.assertFalse(c.island.isVisible()); self.assertEqual(c.notch.kind, 'ok')
+        c.set_progress('Glass'); self.assertEqual(c.island.style_name, 'Glass')
+        self.assertEqual(self.settings.value('wheel/progress'), 'Glass')
+
+
 if __name__ == '__main__':
     unittest.main()

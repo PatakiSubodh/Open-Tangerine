@@ -1,4 +1,4 @@
-"""Saved preferences (output folder, theme), helper health checks and the Settings window."""
+"""Phase 5: saved preferences (output folder, excluded applications), the wheel's exclusion check and the Settings window."""
 import os, sys, tempfile, unittest
 from pathlib import Path
 from unittest import mock
@@ -36,6 +36,42 @@ class OutputFolder(Base):
         from PIL import Image
         Image.new('RGB', (8, 8)).save(src);result = engine.convert({'paths': [str(src)], 'target': 'JPEG', 'output': prefs.output_folder(self.settings)});self.assertEqual(Path(result[0]).parent, out)
 
+class Exclusions(Base):
+    def test_round_trip_and_case_and_path_forms(self):
+        self.assertEqual(prefs.add_excluded(self.settings, 'C:\\Program Files\\Corel\\CorelDRAW.EXE'), 'coreldraw.exe')
+        self.assertEqual(prefs.excluded(self.settings), {'coreldraw.exe': 'CorelDRAW'});self.assertIn('coreldraw.exe', prefs.excluded_names(self.settings))
+        prefs.remove_excluded(self.settings, 'CorelDRAW.exe');self.assertEqual(prefs.excluded(self.settings), {})
+    def test_only_programs_can_be_excluded(self):
+        self.assertIsNone(prefs.add_excluded(self.settings, 'C:\\notes.txt'));self.assertEqual(prefs.excluded(self.settings), {})
+    def test_matching_ignores_case_and_folder(self):
+        names = frozenset({'coreldrw.exe'})
+        self.assertTrue(prefs.is_excluded('C:\\Apps\\CorelDRW.EXE', names));self.assertTrue(prefs.is_excluded('/opt/x/coreldrw.exe', names))
+        self.assertFalse(prefs.is_excluded('C:\\Windows\\explorer.exe', names));self.assertFalse(prefs.is_excluded('', names));self.assertFalse(prefs.is_excluded(None, names))
+    def test_damaged_value_gives_an_empty_list(self):
+        for bad in ('not json', '[1,2]', '{"": "x"}'): self.settings.setValue('wheel/excluded', bad);self.assertEqual(prefs.excluded(self.settings), {}, bad)
+
+@unittest.skipUnless(sys.platform == 'win32', 'The wheel sampler is Windows-only')
+class WheelCheck(Base):
+    def sampler(self, **kw):
+        import wheel
+        return wheel.WindowsSampler(**kw)
+    def test_excluded_program_never_starts_the_wheel(self):
+        s = self.sampler(excluded=lambda: frozenset({'coreldrw.exe'}))
+        self.assertFalse(s.allowed(4242, 'CabinetWClass', 'C:\\Corel\\CorelDRW.exe'))          # even from a class that is normally allowed
+        self.assertTrue(s.allowed(4242, 'CabinetWClass', 'C:\\Windows\\explorer.exe'))
+    def test_other_windows_are_still_limited_to_explorer_unless_any_app_is_on(self):
+        s = self.sampler()
+        self.assertFalse(s.allowed(4242, 'Notepad', 'C:\\Windows\\notepad.exe'));s.any_app = True;self.assertTrue(s.allowed(4242, 'Notepad', 'C:\\Windows\\notepad.exe'))
+    def test_exclusion_beats_trigger_from_other_apps(self):
+        s = self.sampler(any_app=True, excluded=lambda: frozenset({'notepad.exe'}));self.assertFalse(s.allowed(4242, 'Notepad', 'C:\\Windows\\notepad.exe'))
+    def test_own_windows_never_start_the_wheel(self):
+        self.assertFalse(self.sampler(any_app=True).allowed(os.getpid(), 'Qt', 'C:\\x\\python.exe'))
+    def test_list_is_read_live_from_settings(self):
+        names = lambda: prefs.excluded_names(self.settings);s = self.sampler(any_app=True, excluded=names);self.assertTrue(s.allowed(1, 'X', 'C:\\a\\tool.exe'))
+        prefs.add_excluded(self.settings, 'C:\\a\\tool.exe');self.assertFalse(s.allowed(1, 'X', 'C:\\a\\tool.exe'))          # no restart needed
+    def test_image_of_finds_this_program_and_survives_a_bad_pid(self):
+        s = self.sampler();self.assertEqual(Path(s.image_of(os.getpid())).name.lower(), Path(sys.executable).name.lower());self.assertEqual(s.image_of(0xFFFFFFF0), '')
+
 class Health(unittest.TestCase):
     def test_a_working_helper_reports_its_version(self):
         state, text = settings_dialog.helper_health(sys.executable, ['--version']);self.assertEqual(state, 'ready');self.assertIn('Python', text)
@@ -65,6 +101,11 @@ class Window(Base):
         with mock.patch.object(settings_dialog.QFileDialog, 'getExistingDirectory', return_value=str(out)): d.choose_folder()
         d.reveal.setChecked(True);self.assertEqual(prefs.output_folder(self.settings), str(out));self.assertTrue(prefs.reveal_results(self.settings));self.assertIn(str(out), d.custom_label.text());d.done(0)
         again = self.open();self.assertEqual(again.mode.currentData(), 'custom');self.assertTrue(again.reveal.isChecked());again.done(0)
+    def test_excluded_list_add_and_remove(self):
+        d = self.open()
+        with mock.patch.object(settings_dialog.QFileDialog, 'getOpenFileNames', return_value=(['C:/Apps/CorelDRW.exe', 'C:/Apps/readme.txt'], '')): d.add_excluded()
+        self.assertEqual(d.excluded.count(), 1);self.assertIn('coreldrw.exe', prefs.excluded(self.settings));self.assertFalse(d.remove_excluded.isEnabled())
+        d.excluded.setCurrentRow(0);self.assertTrue(d.remove_excluded.isEnabled());d.remove_selected_excluded();self.assertEqual(d.excluded.count(), 0);self.assertEqual(prefs.excluded(self.settings), {});d.done(0)
     def test_formats_page_shows_helper_state(self):
         fake = {'ffmpeg': (r'C:\f\ffmpeg.exe', 'detected'), 'tesseract': ('', ''), 'soffice': (r'C:\o\soffice.exe', 'chosen')}
         with mock.patch.object(settings_dialog, 'helper_state', side_effect=lambda s, k: fake[k]), mock.patch.object(settings_dialog, 'helper_health', side_effect=lambda p, a, timeout=8: ('broken', 'bad dll') if 'soffice' in p else ('ready', 'ffmpeg version 7.1')):
@@ -79,7 +120,18 @@ class Window(Base):
         with mock.patch.object(settings_dialog, 'helper_state', return_value=(sys.executable, 'detected')), mock.patch.object(settings_dialog, 'helper_health', side_effect=slow):
             d = settings_dialog.SettingsDialog(self.settings);d.done(0)
             self.assertFalse(any(c.isRunning() for c in d.checks))
+    @unittest.skipUnless(sys.platform == 'win32', 'The wheel is Windows-only')
+    def test_wheel_section_needs_a_controller_and_drives_it(self):
+        self.assertFalse(hasattr(self.open(), 'wheel_on'))
+        class Fake:
+            enabled = True;calls = []
+            def set_enabled(self, on): self.calls.append(('enabled', on))
+            def set_any_app(self, on): self.calls.append(('any', on))
+            def refresh_menu(self): self.calls.append('menu')
+        fake = Fake();d = self.open(controller=fake);d.wheel_on.setChecked(False);d.any_app.setChecked(True);d.done(0)
+        self.assertEqual(fake.calls, [('enabled', False), ('any', True), 'menu'])
     def test_wheel_theme_is_saved_on_every_platform(self):
+        # No drag-wheel controller (as on Linux): the theme still applies to the in-window glass wheel.
         self.assertEqual(prefs.wheel_theme(self.settings), 'light')
         d = self.open();self.assertEqual(d.wheel_theme.currentData(), 'light');d.wheel_theme.setCurrentIndex(d.wheel_theme.findData('dark'));d.done(0)
         self.assertEqual(prefs.wheel_theme(self.settings), 'dark');self.assertEqual(self.open().wheel_theme.currentData(), 'dark')

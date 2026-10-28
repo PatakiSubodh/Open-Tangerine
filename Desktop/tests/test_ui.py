@@ -40,6 +40,11 @@ class UITests(unittest.TestCase):
             self.assertTrue(w.banner.isVisible());self.assertFalse(w.convert.isEnabled());self.assertTrue(w.lang.isVisible())
             w.target.setCurrentText('PNG');self.assertFalse(w.banner.isVisible());self.assertTrue(w.convert.isEnabled());self.assertFalse(w.lang.isVisible())
         w.close()
+    @unittest.skipUnless(sys.platform=='win32','The wheel is Windows-only')
+    def test_wheel_integration_and_quit(self):
+        w=Window(enable_wheel=True);self.assertIsNotNone(w.wheel);self.assertFalse(hasattr(w,"wheel_box"))
+        w.show();self.app.processEvents();w.quit_app();self.assertFalse(w.wheel.watcher.timer.isActive())
+
 
 class RegressionUITests(unittest.TestCase):
     @classmethod
@@ -70,6 +75,14 @@ class RegressionUITests(unittest.TestCase):
         drop=QDropEvent(QPointF(1,1),Qt.MoveAction,mime,Qt.LeftButton,Qt.ShiftModifier)
         view.dragEnterEvent(enter);view.dropEvent(drop)
         self.assertFalse(enter.isAccepted());self.assertFalse(drop.isAccepted());self.assertEqual(received,[]);view.close()
+    def test_close_to_tray_keeps_running_conversion(self):
+        import threading
+        from unittest import mock
+        w=Window();w.show();self.app.processEvents()
+        w.wheel=mock.Mock(tray=mock.Mock(),enabled=True);w.batch=mock.Mock(cancel=threading.Event());w.batch.isRunning.return_value=True
+        w.close();self.app.processEvents()
+        self.assertFalse(w.isVisible());self.assertFalse(w.batch.cancel.is_set())
+        w.wheel=None;w.batch=None;w.close()
 
 
 class DialogTests(unittest.TestCase):
