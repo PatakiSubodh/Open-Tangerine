@@ -31,8 +31,10 @@ def stop(proc):
         proc.wait(timeout=10)
     except (OSError,subprocess.TimeoutExpired):pass
 
-def run_job(job,cancel=None,timeout=180,command=None,memory_limit=WORKER_MEMORY,info=None):
+def run_job(job,cancel=None,timeout=None,command=None,memory_limit=WORKER_MEMORY,info=None):
     """Run one job in a disposable worker. `info`, if given, receives `capped` (was the memory limit applied) and `peak_memory` (bytes, Windows only)."""
+    # OCR of a long PDF legitimately runs longer than a conversion.
+    if timeout is None: timeout=960 if str(job.get('target','')).startswith('OCR') else 180
     with ExitStack() as cleanup:
         job=dict(job)
         # Parent-owned staging: removed here even when the worker is killed mid-job.

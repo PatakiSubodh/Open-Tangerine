@@ -8,8 +8,11 @@ MAX_BYTES = 100 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 MAX_OUTPUT = 512 * 1024 * 1024
 MAX_SVG = 5 * 1024 * 1024
+OCR_PAGES = 50
+OCR_SECONDS = 900
 HEIC_INPUTS = {'.heic', '.heif'}
 SVG_INPUTS = {'.svg'}
+OFFICE_INPUTS = {'.doc', '.docx', '.odt', '.rtf', '.xls', '.xlsx', '.ods', '.ppt', '.pptx', '.odp'}
 IMAGE_INPUTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff', '.avif'} | HEIC_INPUTS | SVG_INPUTS
 IMAGE_OUTPUTS = {'PNG': 'png', 'JPEG': 'jpg', 'WEBP': 'webp', 'TIFF': 'tiff', 'BMP': 'bmp', 'HEIC': 'heic', 'AVIF': 'avif'}
 MEDIA_INPUTS = {'.mp4': 'mov', '.mov': 'mov', '.m4v': 'mov', '.mkv': 'matroska', '.webm': 'matroska', '.mp3': 'mp3', '.wav': 'wav', '.flac': 'flac', '.ogg': 'ogg', '.m4a': 'mov', '.aac': 'aac',
@@ -33,7 +36,7 @@ def on_page(img, size):
     from PIL import Image
     img.thumbnail((size[0] - 120, size[1] - 120), Image.Resampling.LANCZOS);sheet = Image.new('RGB', size, 'white');sheet.paste(img, ((size[0] - img.width) // 2, (size[1] - img.height) // 2));return sheet
 
-OPERATIONS = list(IMAGE_OUTPUTS) + ['Image → PDF', 'PDF → Text', 'Merge PDFs', 'Split PDF', 'SRT → VTT', 'VTT → SRT', 'SHA-256'] + list(MEDIA_OUTPUTS) + DOC_OPERATIONS
+OPERATIONS = list(IMAGE_OUTPUTS) + ['Image → PDF', 'PDF → Text', 'OCR → Text', 'OCR → Searchable PDF', 'Merge PDFs', 'Split PDF', 'Office → PDF', 'SRT → VTT', 'VTT → SRT', 'SHA-256'] + list(MEDIA_OUTPUTS) + DOC_OPERATIONS
 class ConversionError(ValueError): pass
 MEMORY_MESSAGE='This file needs more memory than a conversion is allowed to use. Try a smaller file or a smaller output size.'
 
@@ -135,16 +138,20 @@ def open_image(p, width=0):
     return result
 
 TOOLS = {  # settings key -> (display name, executable names, install hint)
-    'ffmpeg': ('FFmpeg', ['ffmpeg'], 'winget install Gyan.FFmpeg')}
+    'ffmpeg': ('FFmpeg', ['ffmpeg'], 'winget install Gyan.FFmpeg'),
+    'tesseract': ('Tesseract OCR', ['tesseract'], 'winget install UB-Mannheim.TesseractOCR'),
+    'soffice': ('LibreOffice', ['soffice', 'libreoffice'], 'winget install TheDocumentFoundation.LibreOffice')}
 
 def _tool_dirs(key):
     """Standard install folders. PATH is searched separately, and only through absolute entries (never the current folder)."""
     env=os.environ.get;pf=[env('ProgramFiles',r'C:\Program Files'),env('ProgramFiles(x86)',r'C:\Program Files (x86)')];local=env('LOCALAPPDATA','')
     if os.name=='nt':
+        if key=='tesseract': return [Path(d)/'Tesseract-OCR' for d in pf]+[Path(local)/'Programs'/'Tesseract-OCR']
+        if key=='soffice': return [Path(d)/'LibreOffice'/'program' for d in pf]
         winget=Path(local)/'Microsoft'/'WinGet'
         found=[winget/'Links']+[b for pkg in sorted((winget/'Packages').glob('*FFmpeg*')) for b in pkg.glob('**/bin')]
         return found+[Path(d)/'ffmpeg'/'bin' for d in pf]+[Path(r'C:\ffmpeg\bin'),Path(env('ProgramData',r'C:\ProgramData'))/'chocolatey'/'bin']
-    return [Path(d) for d in ('/usr/bin','/usr/local/bin','/opt/homebrew/bin','/snap/bin')]
+    return [Path(d) for d in ('/usr/bin','/usr/local/bin','/opt/homebrew/bin','/snap/bin','/opt/libreoffice/program','/Applications/LibreOffice.app/Contents/MacOS')]
 
 def find_tool(key):
     """Locate a helper on PATH or in its usual install folder. Returns a resolved absolute Path or None."""
@@ -171,6 +178,106 @@ def tool_path(raw, name, key=None):
     exe=Path(raw)
     if not exe.is_absolute() or not exe.is_file() or exe.is_symlink(): raise ConversionError(f'{name} must be an existing absolute executable path.')
     return exe
+
+def run_external(cmd, deadline, cwd=None, tail=500):
+    """Run a user-selected helper without a shell; the whole process tree dies at the deadline."""
+    from runner import stop
+    kwargs={'start_new_session':True} if os.name!='nt' else {'creationflags':subprocess.CREATE_NO_WINDOW}
+    with tempfile.TemporaryFile() as log:
+        proc=subprocess.Popen(cmd,stdin=subprocess.DEVNULL,stdout=log,stderr=log,cwd=cwd,**kwargs)
+        try:
+            while proc.poll() is None:
+                if time.monotonic()>deadline or log.tell()>65536: raise ConversionError('External tool exceeded its time or diagnostic limit.')
+                time.sleep(.05)
+            log.seek(0)
+            return proc.returncode,log.read(65536).decode('utf8','replace')[-tail:]
+        finally: stop(proc)
+
+def tesseract_languages(exe):
+    """Installed OCR language codes, or [] if the helper cannot list them."""
+    try:
+        kw={'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}
+        r=subprocess.run([str(exe),'--list-langs'],stdin=subprocess.DEVNULL,capture_output=True,timeout=15,**kw)
+        return [l.strip() for l in (r.stdout+r.stderr).decode('utf8','replace').splitlines()[1:] if re.fullmatch(r'[A-Za-z_]{3,16}',l.strip())]
+    except Exception: return []
+
+def prepare_ocr_image(im):
+    """Flatten transparency, enlarge small images (screenshots) towards ~300 dpi text, fix dark-on-light polarity and stretch contrast.
+    Returns (image, dpi); the dpi keeps a searchable PDF page at its original physical size."""
+    from PIL import Image, ImageOps, ImageStat
+    rgba=im.convert('RGBA');base=Image.new('RGB',rgba.size,'white');base.paste(rgba,mask=rgba.getchannel('A'))
+    longest=max(base.size);factor=1.0
+    if longest<2400: factor=min(3.0,2400/longest,(25_000_000/(base.width*base.height))**.5)
+    if factor>1.05: base=base.resize((round(base.width*factor),round(base.height*factor)),Image.Resampling.LANCZOS)
+    else: factor=1.0
+    gray=ImageOps.autocontrast(base.convert('L'),cutoff=1)
+    # Tesseract reads dark text on a light page; light-on-dark (dark-mode screenshots) is inverted first.
+    if ImageStat.Stat(gray).mean[0]<110: gray=ImageOps.invert(gray)
+    return gray,round(300*factor)
+
+def ocr_text(p, work, stage, tesseract, lang, searchable=False):
+    exe=tool_path(tesseract,'Tesseract','tesseract')
+    if not re.fullmatch(r'[A-Za-z_]{3,16}(\+[A-Za-z_]{3,16}){0,2}',lang): raise ConversionError('Invalid OCR language code (for example eng or eng+deu).')
+    work=Path(work);texts=[];pdfs=[]
+    def recognize(image,n,dpi,deadline):
+        png=work/f'ocr-{n}.png';image.save(png,dpi=(dpi,dpi))
+        # Text mode retries sparse layouts (a single block, then scattered words) when the page layout guess finds nothing.
+        for psm in (('3',) if searchable else ('3','6','11')):
+            base=work/f'text-{n}-{psm}'
+            code,detail=run_external([str(exe),str(png),str(base),'-l',lang,'--psm',psm,'--dpi',str(dpi),'-c','preserve_interword_spaces=1',*(['pdf'] if searchable else [])],deadline,cwd=work)
+            out=work/(base.name+('.pdf' if searchable else '.txt'))
+            if code or not out.is_file():
+                if re.search(r'Failed loading language|Error opening data file|Could not initialize tesseract',detail):
+                    have=', '.join(l for l in tesseract_languages(exe) if l!='osd') or 'none found'
+                    raise ConversionError(f'Tesseract has no data for language "{lang}". Installed: {have}. Add the .traineddata file to the Tesseract tessdata folder, or change the OCR language.')
+                raise ConversionError('Tesseract could not read this file. Check the language data is installed. '+detail)
+            if searchable: pdfs.append(out);return
+            text=out.read_text(encoding='utf8',errors='replace').rstrip()
+            text=re.sub(r'[\x00-\x08\x0b-\x1f]','',text)  # Tesseract ends each page with a form feed
+            if text.strip(): texts.append(text);return
+        texts.append('')
+    if p.suffix.lower()=='.pdf':
+        import pypdfium2 as pdfium
+        pages=len(read_pdf(p).pages)
+        if pages>OCR_PAGES: raise ConversionError(f'OCR is limited to {OCR_PAGES} pages per PDF.')
+        deadline=time.monotonic()+min(OCR_SECONDS-30,60+25*pages)
+        doc=pdfium.PdfDocument(str(p))
+        try:
+            for i in range(pages):
+                page=doc[i];w,h=page.get_size()
+                # 300 dpi, shrunk if the page would exceed the pixel budget.
+                scale=min(300/72,(MAX_PIXELS/max(w*h,1))**.5)
+                image,_=prepare_ocr_image(page.render(scale=scale).to_pil());page.close()
+                recognize(image,i,round(72*scale),deadline)
+        finally: doc.close()
+    elif p.suffix.lower() in IMAGE_INPUTS:
+        im=open_image(p)
+        try: image,dpi=prepare_ocr_image(im)
+        finally: im.close()
+        recognize(image,0,dpi,time.monotonic()+120)
+    else: raise ConversionError('OCR requires a PDF or an image.')
+    if searchable:
+        from pypdf import PdfWriter
+        writer=PdfWriter()
+        for part in pdfs:
+            for page in read_pdf(part).pages: writer.add_page(page)
+        with stage.open('wb') as f: writer.write(f)
+        return
+    text='\n\n'.join(t for t in texts if t)
+    if not text.strip(): raise ConversionError('No text was recognized. Try a sharper or larger image, or check the OCR language.')
+    stage.write_text(text+'\n',encoding='utf8')
+
+def office_pdf(p, work, stage, soffice):
+    exe=tool_path(soffice,'LibreOffice','soffice')
+    if p.suffix.lower() not in OFFICE_INPUTS: raise ConversionError('Select a Word, Excel, PowerPoint or OpenDocument file.')
+    work=Path(work);src=work/'in';out=work/'out';src.mkdir();out.mkdir()
+    # Neutral name, private copy and throwaway profile: the original's folder is never touched.
+    local=src/('input'+p.suffix.lower());shutil.copyfile(p,local)
+    cmd=[str(exe),'--headless','--norestore','--nolockcheck','--nologo','--nofirststartwizard',f'-env:UserInstallation={(work/"profile").as_uri()}','--convert-to','pdf','--outdir',str(out),str(local)]
+    code,detail=run_external(cmd,time.monotonic()+150,cwd=work)
+    result=out/'input.pdf'
+    if code or not result.is_file(): raise ConversionError('LibreOffice could not convert this file. '+detail)
+    read_pdf(result);os.replace(result,stage)
 
 def read_pdf(p):
     from pypdf import PdfReader
@@ -272,6 +379,10 @@ def convert(job):
         elif target in DOC_OPERATIONS:
             import docops
             results.extend(docops.dispatch(target,p,work,stage,folder,stem))
+        elif target in ('OCR → Text','OCR → Searchable PDF'):
+            searchable=target.endswith('PDF');ocr_text(p,work,stage,job.get('tesseract',''),job.get('ocr_lang') or 'eng',searchable);results.append(publish(stage,folder,stem+('-searchable' if searchable else ''),'pdf' if searchable else 'txt'))
+        elif target=='Office → PDF':
+            office_pdf(p,work,stage,job.get('soffice',''));results.append(publish(stage,folder,stem,'pdf'))
         elif target in MEDIA_OUTPUTS:
             media(p,stage,target,job.get('ffmpeg',''));results.append(publish(stage,folder,stem,MEDIA_OUTPUTS[target][0]))
         elif target=='SHA-256':

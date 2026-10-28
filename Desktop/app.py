@@ -8,7 +8,7 @@ import os, threading
 from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QUrl, QSettings
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QMessageBox,QAbstractItemView,QCheckBox)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QMessageBox,QAbstractItemView,QCheckBox,QLineEdit)
 from engine import VERSION, OPERATIONS, source_file
 from runner import run_job, Cancelled
 from glass_wheel import GlassWheel, WHEEL_STYLE
@@ -75,6 +75,8 @@ class Window(QMainWindow):
         self.wheel.set_current(self.target.currentText())
         self.width=QSpinBox();self.width.setRange(0,10000);self.width.setSpecialValueText('Original size');self.width.setSuffix(' px max side');self.width.setAccessibleName('Maximum image side in pixels');row.addWidget(self.width)
         self.rotate=QComboBox();self.rotate.addItems(['No rotation','90° clockwise','180°','270° clockwise']);row.addWidget(self.rotate)
+        self.lang_label=QLabel('OCR language');row.addWidget(self.lang_label)
+        self.lang=QLineEdit(self.settings.value('ocr_lang','eng'));self.lang.setMaximumWidth(90);self.lang.setToolTip('Tesseract language code, for example eng or eng+deu');self.lang.editingFinished.connect(lambda:self.settings.setValue('ocr_lang',self.lang.text().strip() or 'eng'));row.addWidget(self.lang)
         self.target.currentTextChanged.connect(self.update_options);self.update_options()
         row=QHBoxLayout();layout.addLayout(row)
         self.convert=QPushButton('Convert files');self.convert.setStyleSheet('background:#ff610a;color:#101010;font-weight:bold;padding:12px;');self.convert.clicked.connect(self.start);row.addWidget(self.convert)
@@ -101,6 +103,7 @@ class Window(QMainWindow):
         self.shift_wheel.set_enabled(enabled)
     def update_options(self):
         enabled=self.target.currentText() in ['PNG','JPEG','WEBP','TIFF','BMP','HEIC','AVIF','Image → PDF'];self.width.setEnabled(enabled);self.rotate.setEnabled(enabled)
+        ocr=self.target.currentText() in ('OCR → Text','OCR → Searchable PDF');self.lang.setVisible(ocr);self.lang_label.setVisible(ocr)
     def add_paths(self,paths):
         if self.batch and self.batch.isRunning():return
         errors=[]
@@ -123,14 +126,14 @@ class Window(QMainWindow):
             self.settings.setValue('ffmpeg',str(Path(path).resolve()));self.status.setText('FFmpeg selected. It runs only when you request media conversion.')
     def ffmpeg_path(self):return self.settings.value('ffmpeg','')
     def show_limits(self):
-        QMessageBox.information(self,'Trial capabilities','Images: PNG, JPEG, WebP, AVIF, TIFF, BMP and HEIC output; PNG/JPEG/WebP/TIFF/BMP/AVIF/HEIC/SVG input. Resize and rotate. Single-frame only (HEIC: primary image); 40 megapixels; SVG under 5 MiB. RAW is not supported.\n\nDocuments: image to PDF or DOCX (A4 pages), merge PDFs (up to 200 pages), split, extract text, pages to PNG/JPEG, PDF to DOCX. Text files to PDF, PNG, JPEG, SRT or VTT. No OCR or password-protected PDFs.\n\nMedia: MP4, WebM, MOV, MKV, AVI, WMV, GIF, MP3, M4A, WAV, FLAC, Ogg, Opus, AIFF and WMA using a separately installed FFmpeg, found automatically or chosen with Set FFmpeg. Codecs depend on your installation. No FFmpeg download is performed.\n\nSRT/VTT conversion (also to plain text) and SHA-256 checksums.\n\nWorkers have time/output limits but are not an operating-system security sandbox. Process trusted files. Archives and the Mac notch are not included. Windows offers an opt-in Explorer/Desktop Shift drag wheel and tray mode; Linux uses the app window. Failed files do not stop the batch.')
+        QMessageBox.information(self,'Trial capabilities','Images: PNG, JPEG, WebP, AVIF, TIFF, BMP and HEIC output; PNG/JPEG/WebP/TIFF/BMP/AVIF/HEIC/SVG input. Resize and rotate. Single-frame only (HEIC: primary image); 40 megapixels; SVG under 5 MiB. RAW is not supported.\n\nDocuments: image to PDF or DOCX (A4 pages), merge PDFs (up to 200 pages), split, extract text, pages to PNG/JPEG, PDF to DOCX. Text files to PDF, PNG, JPEG, SRT or VTT. No password-protected PDFs.\n\nOCR: images and PDFs up to 50 pages to a text file or a searchable PDF, with a separately installed Tesseract (found automatically).\n\nOffice: Word, Excel, PowerPoint and OpenDocument files to PDF with a separately installed LibreOffice (found automatically).\n\nMedia: MP4, WebM, MOV, MKV, AVI, WMV, GIF, MP3, M4A, WAV, FLAC, Ogg, Opus, AIFF and WMA using a separately installed FFmpeg, found automatically or chosen with Set FFmpeg. Codecs depend on your installation. No FFmpeg download is performed.\n\nSRT/VTT conversion (also to plain text) and SHA-256 checksums.\n\nWorkers have time/output limits but are not an operating-system security sandbox. Process trusted files. Archives and the Mac notch are not included. Windows offers an opt-in Explorer/Desktop Shift drag wheel and tray mode; Linux uses the app window. Failed files do not stop the batch.')
     def start(self):
         if not self.paths or (self.batch and self.batch.isRunning()):return
         self.batch_errors=[]
         self.outputs=[];self.open.setEnabled(False);self.progress.setValue(0)
         for button in (self.add,self.clear,self.folder,self.convert,self.target,self.wheel):button.setEnabled(False)
         self.cancel.setEnabled(True);self.status.setText('Converting…')
-        self.batch=Batch(list(self.paths),self.target.currentText(),{'output':self.output,'width':self.width.value(),'rotation':self.rotate.currentIndex()*90,'ffmpeg':self.ffmpeg_path()})
+        self.batch=Batch(list(self.paths),self.target.currentText(),{'output':self.output,'width':self.width.value(),'rotation':self.rotate.currentIndex()*90,'ffmpeg':self.ffmpeg_path(),'tesseract':self.settings.value('tesseract',''),'soffice':self.settings.value('soffice',''),'ocr_lang':self.lang.text().strip() or 'eng'})
         self.batch.result.connect(self.result);self.batch.progress.connect(lambda n,total:self.progress.setValue(round(n/total*100)));self.batch.finished.connect(self.finished);self.batch.start()
         if self.background:self.background.started()
     def result(self,index,status,outputs):

@@ -1,4 +1,4 @@
-import json,os,subprocess,tempfile
+import json,os,subprocess,sys,tempfile
 from pathlib import Path
 from PIL import Image
 root=Path(__file__).resolve().parent
@@ -25,6 +25,11 @@ with tempfile.TemporaryDirectory() as folder:
  with Image.open(worker({'paths':[heic],'target':'PNG','output':folder})[0]) as im:assert im.size==(20,20)
  from pypdf import PdfWriter
  pdf=Path(folder)/'blank.pdf';w=PdfWriter();w.add_blank_page(100,100);w.write(pdf)
+ # Stand-in Tesseract (we cannot ship the real one): proves the packaged app renders PDF pages with the bundled pdfium.
+ fake=Path(folder)/'fake-tesseract.py';fake.write_text("import sys\nopen(sys.argv[2]+'.txt','w').write('packaged OCR ok')\n")
+ if os.name=='nt':ocr=Path(folder)/'fake-tesseract.bat';ocr.write_text(f'@"{sys.executable}" "{fake}" %*'+chr(13)+chr(10))
+ else:ocr=Path(folder)/'fake-tesseract';ocr.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"'+chr(10));ocr.chmod(0o755)
+ assert 'packaged OCR ok' in Path(worker({'paths':[str(pdf)],'target':'OCR → Text','output':folder,'tesseract':str(ocr)})[0]).read_text(encoding='utf8')
  from pypdf import PdfReader
  # AVIF encoder, A4 documents, pdfium page rendering, DOCX writer, text layout.
  with Image.open(worker({'paths':[str(p)],'target':'AVIF','output':folder})[0]) as im:assert im.size==(20,20)
@@ -33,7 +38,7 @@ with tempfile.TemporaryDirectory() as folder:
  with Image.open(worker({'paths':[str(pdf)],'target':'PDF → PNG','output':folder})[0]) as im:assert im.size[0]>0
  import zipfile
  with zipfile.ZipFile(worker({'paths':[str(p)],'target':'Image → DOCX','output':folder})[0]) as z:assert b'w:w="11906"' in z.read('word/document.xml')
-print('PASS: packaged GUI launch plus PNG, SVG, HEIC, AVIF, PDF-render and document worker jobs')
+print('PASS: packaged GUI launch plus PNG, SVG, HEIC, AVIF, PDF-render/OCR and document worker jobs')
 
 # Exercise the FFmpeg subprocess under the packaged worker's Linux resource limits.
 import shutil
