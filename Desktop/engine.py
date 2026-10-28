@@ -32,7 +32,7 @@ AUDIO_TARGETS = ['MP3', 'WAV', 'FLAC', 'OGG', 'M4A', 'OPUS', 'AIFF', 'WMA']
 GIF_TARGETS = ['MP4', 'WEBM', 'MOV', 'MKV', 'AVI', 'WMV']
 AUDIO_INPUTS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.aiff', '.aif'}
 TEXT_INPUTS = {'.txt', '.md', '.log', '.text'}
-DOC_OPERATIONS = ['Image → DOCX', 'PDF → PNG', 'PDF → JPEG', 'PDF → DOCX', 'Text → PDF', 'Text → PNG', 'Text → JPEG', 'Text → SRT', 'Text → VTT', 'Subtitle → Text']
+DOC_OPERATIONS = ['Files → PDF', 'Files → DOCX', 'Image → DOCX', 'PDF → PNG', 'PDF → JPEG', 'PDF → DOCX', 'Text → PDF', 'Text → PNG', 'Text → JPEG', 'Text → SRT', 'Text → VTT', 'Subtitle → Text']
 PAGE_PIXELS = {'a4': (1240, 1754), 'letter': (1275, 1650)}          # 150 dpi
 
 def on_page(img, size):
@@ -40,6 +40,11 @@ def on_page(img, size):
     from PIL import Image
     img.thumbnail((size[0] - 120, size[1] - 120), Image.Resampling.LANCZOS);sheet = Image.new('RGB', size, 'white');sheet.paste(img, ((size[0] - img.width) // 2, (size[1] - img.height) // 2));return sheet
 
+# One output from every selected file, in list order; the Files → targets convert a mixed selection one file at a time.
+COMBINE_TARGETS = {'Combine → PDF': 'pdf', 'Combine → DOCX': 'docx'}
+COMBINED_TARGETS = ('Merge PDFs', *COMBINE_TARGETS)
+PDF_INPUTS = IMAGE_INPUTS | OFFICE_INPUTS | TEXT_INPUTS | {'.pdf'}
+DOCX_INPUTS = IMAGE_INPUTS | TEXT_INPUTS | {'.pdf'}
 OPERATIONS = list(IMAGE_OUTPUTS) + ['Image → PDF', 'PDF → Text', 'OCR → Text', 'OCR → Searchable PDF', 'Merge PDFs', 'Split PDF', 'Office → PDF', 'SRT → VTT', 'VTT → SRT', 'SHA-256'] + list(MEDIA_OUTPUTS) + DOC_OPERATIONS
 class ConversionError(ValueError): pass
 MEMORY_MESSAGE='This file needs more memory than a conversion is allowed to use. Try a smaller file or a smaller output size.'
@@ -293,6 +298,59 @@ def office_pdf(p, work, stage, soffice):
     if code or not result.is_file(): raise ConversionError('LibreOffice could not convert this file. '+detail)
     read_pdf(result);os.replace(result,stage)
 
+def image_pdf(p, stage):
+    """One image centred on a white A4 page, as Image → PDF does with its default options."""
+    from PIL import Image
+    im=open_image(p)
+    try:
+        rgba=im.convert('RGBA');base=Image.new('RGB',rgba.size,'white');base.paste(rgba,mask=rgba.getchannel('A'))
+        on_page(base,PAGE_PIXELS['a4']).save(stage,format='PDF',quality=90,resolution=150)
+    finally: im.close()
+
+A4_POINTS = (595.276, 841.89)
+
+def fit_a4(page):
+    """`page` on an A4 sheet (landscape for wide pages), scaled to fit and centred. Pages already A4 are kept as they are."""
+    from pypdf import PageObject, Transformation
+    page.transfer_rotation_to_content();box = page.cropbox;w, h = float(box.width), float(box.height)
+    W, H = A4_POINTS if h >= w else A4_POINTS[::-1]
+    if abs(w - W) < 2 and abs(h - H) < 2: return page
+    s = min(W / w, H / h);sheet = PageObject.create_blank_page(width=W, height=H)
+    sheet.merge_transformed_page(page, Transformation().translate(-float(box.left), -float(box.bottom)).scale(s, s).translate((W - w * s) / 2, (H - h * s) / 2))
+    return sheet
+
+def a4_pdf(source, stage):
+    """Rewrite a PDF with every page on A4 (Office documents keep their own paper size, often US Letter)."""
+    from pypdf import PdfWriter
+    writer = PdfWriter()
+    for page in read_pdf(source).pages: writer.add_page(fit_a4(page))
+    with stage.open('wb') as f: writer.write(f)
+
+def file_pdf(p, work, stage, job):
+    """Any supported document or image to a PDF at `stage`, by its own route. PDFs are copied unchanged."""
+    s=p.suffix.lower()
+    if s=='.pdf': read_pdf(p);shutil.copyfile(p,stage)
+    elif s in IMAGE_INPUTS: image_pdf(p,stage)
+    elif s in OFFICE_INPUTS: raw=Path(work)/'office.pdf';office_pdf(p,work,raw,job.get('soffice',''));a4_pdf(raw,stage)
+    elif s in TEXT_INPUTS:
+        import docops
+        docops.text_to_pdf(docops.read_text(p),stage)
+    else: raise ConversionError('Only images, PDFs, text and Office files can become a PDF.')
+
+def combine_pdf(paths, work, stage, job):
+    """Every file to PDF in its own folder, then all pages in list order. Nothing is published unless every file converts."""
+    from pypdf import PdfWriter
+    writer=PdfWriter();total=0
+    for i,p in enumerate(paths):
+        part=Path(work)/f'part-{i}';part.mkdir();out=part/'out.pdf'
+        try:
+            file_pdf(p,part,out,job);pdf=read_pdf(out)
+        except ConversionError as e: raise ConversionError(f'{p.name}: {e}') from e
+        total+=len(pdf.pages)
+        if total>200: raise ConversionError('The combined PDF cannot exceed 200 pages.')
+        for page in pdf.pages: writer.add_page(fit_a4(page))
+    with stage.open('wb') as f: writer.write(f)
+
 def read_pdf(p):
     from pypdf import PdfReader
     pdf=PdfReader(str(p),strict=False)
@@ -328,11 +386,11 @@ def convert(job):
     if isinstance(target,str) and target.startswith('tool:'):
         import toolops
         return toolops.run_tool(job)
-    if target not in OPERATIONS: raise ConversionError('Unsupported operation.')
+    if target not in OPERATIONS and target not in COMBINE_TARGETS: raise ConversionError('Unsupported operation.')
     raws=job.get('paths',[])
     if not isinstance(raws,list) or not 1<=len(raws)<=100: raise ConversionError('Select 1–100 files.')
     paths=[source_file(p) for p in raws]
-    if target!='Merge PDFs' and len(paths)!=1: raise ConversionError('Each conversion job accepts one input; use the batch queue.')
+    if target not in COMBINED_TARGETS and len(paths)!=1: raise ConversionError('Each conversion job accepts one input; use the batch queue.')
     folder,work_root=job_folders(job,paths[0])
     p=paths[0]; stem=p.stem+'-converted';results=[]
     with tempfile.TemporaryDirectory(prefix='.opentangerine-',dir=work_root) as work:
@@ -388,13 +446,21 @@ def convert(job):
                         pieces.append(item)
                         if sum(x.stat().st_size for x in pieces)>MAX_OUTPUT: raise ConversionError('Split outputs exceed 512 MiB.')
                     for i,item in enumerate(pieces):results.append(publish(item,folder,f'{p.stem}-page-{i+1}','pdf'))
+        elif target=='Combine → PDF':
+            combine_pdf(paths,work,stage,job);results.append(publish(stage,folder,'combined','pdf'))
+        elif target=='Combine → DOCX':
+            import docops
+            docops.combine_docx(paths,work,stage);results.append(publish(stage,folder,'combined','docx'))
+        elif target=='Files → PDF':
+            # A file that is already a PDF needs nothing; it only joins in when the selection is combined.
+            if p.suffix.lower()!='.pdf': file_pdf(p,work,stage,job);results.append(publish(stage,folder,stem,'pdf'))
         elif target in DOC_OPERATIONS:
             import docops
             results.extend(docops.dispatch(target,p,work,stage,folder,stem))
         elif target in ('OCR → Text','OCR → Searchable PDF'):
             searchable=target.endswith('PDF');ocr_text(p,work,stage,job.get('tesseract',''),job.get('ocr_lang') or 'eng',searchable);results.append(publish(stage,folder,stem+('-searchable' if searchable else ''),'pdf' if searchable else 'txt'))
         elif target=='Office → PDF':
-            office_pdf(p,work,stage,job.get('soffice',''));results.append(publish(stage,folder,stem,'pdf'))
+            raw=Path(work)/'office.pdf';office_pdf(p,work,raw,job.get('soffice',''));a4_pdf(raw,stage);results.append(publish(stage,folder,stem,'pdf'))
         elif target in MEDIA_OUTPUTS:
             media(p,stage,target,job.get('ffmpeg',''));results.append(publish(stage,folder,stem,MEDIA_OUTPUTS[target][0]))
         elif target=='SHA-256':

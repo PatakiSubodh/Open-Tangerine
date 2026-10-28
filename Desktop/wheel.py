@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QPoint, QTimer, Signal
 from PySide6.QtGui import QCursor, QGuiApplication, QIcon
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
-from engine import IMAGE_OUTPUTS, MEDIA_OUTPUTS
+from engine import IMAGE_OUTPUTS, MEDIA_OUTPUTS, COMBINED_TARGETS
 from batch import Batch
 import actions, prefs, toolops
 from wheelmodel import *                      # noqa: F401,F403  (re-exported: items, modes, DragDetector, Sample)
@@ -182,7 +182,7 @@ class WheelController(QObject):
         if self.batch and self.batch.isRunning(): self.notch.show_message('Still busy with the previous drop', 'error', seconds=3);return
         s = self.settings
         options = {'output': prefs.output_folder(s), 'width': 0, 'rotation': 0, 'ffmpeg': s.value('ffmpeg', ''), 'tesseract': s.value('tesseract', ''), 'soffice': s.value('soffice', ''), 'ocr_lang': s.value('ocr_lang', 'eng')}
-        self.statuses = [];self.outputs = [];self.total = 1 if target == 'Merge PDFs' else len(paths);self.noun = f'{len(paths)} file{"s" if len(paths) != 1 else ""}';self.target = target
+        self.statuses = [];self.outputs = [];self.total = 1 if target in COMBINED_TARGETS else len(paths);self.noun = f'{len(paths)} file{"s" if len(paths) != 1 else ""}';self.target = target
         self.name = short_label(target) if target not in IMAGE_OUTPUTS and target not in MEDIA_OUTPUTS else target
         self.notch.show_message(TITLES.get(target, 'Converting to ' + self.name), 'info', detail=self.noun, fraction=0)
         self.batch = Batch(list(paths), target, options);self.batch.result.connect(self.result);self.batch.progress.connect(self.advance);self.batch.finished.connect(self.finished);self.batch.start()

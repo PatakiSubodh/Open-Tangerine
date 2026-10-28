@@ -49,7 +49,7 @@ def helper_for(op):
     """Settings key of the optional helper program an operation needs, or ''."""
     return 'tesseract' if op in OCR_OPS else 'soffice' if op=='Office → PDF' else 'ffmpeg' if op in MEDIA_OUTPUTS else ''
 OCR_OPS=('OCR → Text','OCR → Searchable PDF')
-HINTS={'OCR → Text':'Reads the text in images and scanned PDFs into a .txt file (PDFs up to 50 pages).','OCR → Searchable PDF':'Keeps the page look but makes the text selectable and searchable.','PDF → Text':'Copies the text a PDF already contains. For scans, use OCR instead.','Merge PDFs':'Combines all listed PDFs, in list order, into one file.','Office → PDF':'Word, Excel, PowerPoint and OpenDocument files to PDF.','SHA-256':'Writes a checksum file you can use to verify a download.'}
+HINTS={'OCR → Text':'Reads the text in images and scanned PDFs into a .txt file (PDFs up to 50 pages).','OCR → Searchable PDF':'Keeps the page look but makes the text selectable and searchable.','PDF → Text':'Copies the text a PDF already contains. For scans, use OCR instead.','Merge PDFs':'Combines all listed PDFs, in list order, into one file.','Office → PDF':'Word, Excel, PowerPoint and OpenDocument files to PDF.','Files → PDF':'Each file to PDF its own way (images, text and Office files). Files that are already PDFs are left as they are unless you make one file.','Files → DOCX':'Images, PDFs and text files to Word.','SHA-256':'Writes a checksum file you can use to verify a download.'}
 STYLE=theme.STYLE
 
 class Window(QMainWindow):
@@ -76,6 +76,7 @@ class Window(QMainWindow):
         step=QLabel('2   Choose what to make');step.setObjectName('step');layout.addWidget(step)
         row=QHBoxLayout();layout.addLayout(row);row.addWidget(QLabel('Convert to'))
         self.target=QComboBox();self.target.setMinimumContentsLength(16);self.target.setMaxVisibleItems(20);row.addWidget(self.target,1)
+        self.combine=QComboBox();self.combine.addItems(['Separate files','One file']);self.combine.setAccessibleName('Separate files or one combined file');self.combine.setToolTip('One file joins every listed file, in list order');self.combine.currentIndexChanged.connect(self.update_options);row.addWidget(self.combine)
         self.width_label=QLabel('Max size');row.addWidget(self.width_label)
         self.width=QSpinBox();self.width.setRange(0,10000);self.width.setSpecialValueText('Original');self.width.setSuffix(' px');self.width.setAccessibleName('Maximum image side in pixels');self.width.setToolTip('Shrink so the longest side is at most this many pixels');row.addWidget(self.width)
         self.rotate=QComboBox();self.rotate.addItems(['No rotation','Rotate 90° right','Rotate 180°','Rotate 90° left']);row.addWidget(self.rotate)
@@ -116,26 +117,35 @@ class Window(QMainWindow):
         # The six most common targets as glass panes; the rest stay in the list. An empty queue shows the classic image ring.
         self.glass.set_formats(([t for t in options if t!='SHA-256'][:6] or options) if self.paths else ());self.glass.set_current(self.target.currentText())
         self.update_options()
+    def chosen_target(self):
+        """The operation to run: the one-file version when One file is picked for several files."""
+        import wheelmodel
+        op=self.target.currentText();combined=wheelmodel.combine_target(op,self.paths)
+        return combined if combined and self.combine.currentIndex()==1 else op
     def helper_missing(self,op):
         key=helper_for(op)
+        if op in ('Files → PDF','Combine → PDF') and any(Path(p).suffix.lower() in engine.OFFICE_INPUTS for p in self.paths):key='soffice'
         return key,bool(key) and not settings_dialog.helper_state(self.settings,key)[0]
     def update_options(self):
         op=self.target.currentText();img=op in [*IMAGE_OUTPUTS,'Image → PDF'];ocr=op in OCR_OPS
         for w in (self.width,self.rotate):w.setEnabled(img);w.setVisible(img)
         self.width_label.setVisible(img);self.lang.setVisible(ocr);self.lang_label.setVisible(ocr)
-        hint=HINTS.get(op,'');self.hint.setText(hint);self.hint.setVisible(bool(hint))
-        key,missing=self.helper_missing(op);self.banner.setVisible(missing)
+        import wheelmodel
+        self.combine.setVisible(bool(wheelmodel.combine_target(op,self.paths)));run=self.chosen_target()
+        hint='Joins all listed files, in list order, into one file (up to 200 pages).' if run!=op else HINTS.get(op,'')
+        self.hint.setText(hint);self.hint.setVisible(bool(hint))
+        key,missing=self.helper_missing(run);self.banner.setVisible(missing)
         if missing:
             name,_,install=engine.TOOLS[key];self.banner_text.setText(f'{name} is needed for this and was not found on this computer. '+(f'Install it with:  {install}' if os.name=='nt' else 'Install it with your package manager')+'  — then it is picked up automatically, or choose it yourself in Settings.')
         self.update_buttons()
     def update_buttons(self):
-        busy=bool(self.batch and self.batch.isRunning());op=self.target.currentText();key,missing=self.helper_missing(op);n=len(self.paths)
-        self.convert.setText(f'Convert {n} file{"s" if n!=1 else ""} to {op}' if n and op else 'Convert')
+        busy=bool(self.batch and self.batch.isRunning());op=self.target.currentText();run=self.chosen_target();key,missing=self.helper_missing(run);n=len(self.paths)
+        self.convert.setText(f'Combine {n} files into one {engine.COMBINE_TARGETS[run].upper()}' if run in engine.COMBINE_TARGETS else f'Convert {n} file{"s" if n!=1 else ""} to {op}' if n and op else 'Convert')
         self.convert.setEnabled(bool(n) and not busy and not missing)
         self.convert.setToolTip('Add at least one file first.' if not n else f'Install {engine.TOOLS[key][0]} first.' if missing else '')
         self.remove.setEnabled(bool(self.list.selectedItems()) and not busy);self.clear.setEnabled(bool(n) and not busy);self.tools.setEnabled(not busy)
     def set_busy(self,busy):
-        for w in (self.add,self.folder,self.folder_reset,self.target,self.glass,self.width,self.rotate,self.lang):w.setEnabled(not busy)
+        for w in (self.add,self.folder,self.folder_reset,self.target,self.combine,self.glass,self.width,self.rotate,self.lang):w.setEnabled(not busy)
         self.cancel.setVisible(busy)
         if busy:self.update_buttons()
         else:self.update_options()
@@ -172,7 +182,7 @@ class Window(QMainWindow):
     def show_limits(self):
         dialogs.InfoDialog('Supported formats','Everything runs on this computer. Failed files never stop the rest of a batch.',[
             ('Images','Output: PNG, JPEG, WebP, AVIF, TIFF, BMP, HEIC. Input also includes SVG. Resize and rotate. Single-frame only (HEIC: primary image), up to 40 megapixels. SVG is drawn at its own size, or scaled to the maximum side you set. RAW is not supported.'),
-            ('Documents','Image to PDF or DOCX (A4 pages), merge PDFs (up to 200 pages), split, extract text, pages to PNG/JPEG, PDF to DOCX. Text files to PDF, PNG, JPEG, SRT or VTT. Password-protected PDFs are not supported.'),
+            ('Documents','Image to PDF or DOCX (A4 pages), merge PDFs (up to 200 pages), several files (even a mix of images, text, PDFs and Office files) into one PDF or Word file, split, extract text, pages to PNG/JPEG, PDF to DOCX. Text files to PDF, PNG, JPEG, SRT or VTT. Password-protected PDFs are not supported.'),
             ('OCR (needs Tesseract)','Images and PDFs up to 50 pages, to a text file or a searchable PDF. Tesseract is found automatically when installed, or choose it in Settings.'),
             ('Office (needs LibreOffice)','Word, Excel, PowerPoint and OpenDocument files to PDF. LibreOffice is found automatically when installed, or choose it in Settings.'),
             ('Audio and video (needs FFmpeg)','MP4, WebM, MOV, MKV, AVI, WMV, GIF, MP3, M4A, WAV, FLAC, Ogg, Opus, AIFF and WMA. Codecs depend on your FFmpeg. FFmpeg is found automatically when installed, or choose it in Settings.'),
@@ -184,7 +194,7 @@ class Window(QMainWindow):
         self.outputs=[];self.counts=[0,0];self.open.setVisible(False);self.progress.setValue(0);self.progress.setVisible(True)
         for i,p in enumerate(self.paths):self.list.item(i).setText(Path(p).name);self.list.item(i).setForeground(QColor('#f5f3ed'))
         theme.set_status(self.status,'Converting…')
-        self.batch=Batch(list(self.paths),self.target.currentText(),{'output':self.output or prefs.output_folder(self.settings),'width':self.width.value(),'rotation':self.rotate.currentIndex()*90,'ffmpeg':self.settings.value('ffmpeg',''),'tesseract':self.settings.value('tesseract',''),'soffice':self.settings.value('soffice',''),'ocr_lang':self.lang.text().strip() or 'eng'})
+        self.batch=Batch(list(self.paths),self.chosen_target(),{'output':self.output or prefs.output_folder(self.settings),'width':self.width.value(),'rotation':self.rotate.currentIndex()*90,'ffmpeg':self.settings.value('ffmpeg',''),'tesseract':self.settings.value('tesseract',''),'soffice':self.settings.value('soffice',''),'ocr_lang':self.lang.text().strip() or 'eng'})
         self.batch.result.connect(self.result);self.batch.progress.connect(lambda n,total:self.progress.setValue(round(n/total*100)));self.batch.finished.connect(self.finished);self.set_busy(True);self.batch.start()
     def result(self,index,status,outputs):
         self.outputs.extend(outputs);ok=status=='Done';self.counts[0 if ok else 1]+=1

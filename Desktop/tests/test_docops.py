@@ -143,4 +143,37 @@ class OperationTests(unittest.TestCase):
     def test_all_new_operations_listed(self):
         for x in ('AVIF','GIF','AVI','WMV','M4A','OPUS','AIFF','WMA','PDF → PNG','PDF → JPEG','PDF → DOCX','Image → DOCX','Text → PDF','Text → SRT','Subtitle → Text','MOV','MKV'):self.assertIn(x,OPERATIONS)
 
+class CombineTests(Base):
+    def many(self,target,*paths):return dict(paths=[str(p) for p in paths],target=target,output=str(self.root))
+    def test_mixed_files_become_one_pdf_in_list_order(self):
+        out=convert(self.many('Combine → PDF',self.pdf('first.pdf',2),self.png(),self.text('hello')))
+        self.assertEqual([Path(x).name for x in out],['combined.pdf']);pdf=PdfReader(out[0]);self.assertEqual(len(pdf.pages),4)
+        self.assertIn('hello',pdf.pages[3].extract_text())
+        for page in pdf.pages:self.assertEqual((round(float(page.mediabox.width)),round(float(page.mediabox.height))),(595,842))
+    def test_every_combined_page_is_a4_whatever_the_source(self):
+        p=self.root/'odd.pdf';w=PdfWriter();w.add_blank_page(612,792);w.add_blank_page(1853,805);w.add_blank_page(300,300);rot=w.add_blank_page(400,200);rot.rotate(90)
+        with p.open('wb') as f:w.write(f)
+        sizes=[(round(float(x.mediabox.width)),round(float(x.mediabox.height))) for x in PdfReader(convert(self.many('Combine → PDF',p,self.png()))[0]).pages]
+        self.assertEqual(sizes,[(595,842),(842,595),(595,842),(595,842),(595,842)])
+    def test_mixed_files_become_one_docx_with_page_breaks(self):
+        out=convert(self.many('Combine → DOCX',self.png(),self.text('hello\nworld'),self.pdf('blank.pdf',1)))[0]
+        with zipfile.ZipFile(out) as z:
+            xml=z.read('word/document.xml').decode();ET.fromstring(xml)
+            self.assertEqual(xml.count('w:type="page"'),2);self.assertIn('hello',xml);self.assertEqual([n for n in z.namelist() if n.startswith('word/media/')],['word/media/image1.png','word/media/image2.png'])
+    def test_one_bad_file_names_itself_and_publishes_nothing(self):
+        bad=self.root/'song.mp3';bad.write_bytes(b'x')
+        with self.assertRaisesRegex(ConversionError,'song.mp3'):convert(self.many('Combine → PDF',self.png(),bad))
+        with self.assertRaisesRegex(ConversionError,'song.mp3'):convert(self.many('Combine → DOCX',self.png(),bad))
+        self.assertFalse(any(self.root.glob('combined*')))
+    def test_page_limit_covers_the_whole_result(self):
+        big=self.pdf('big.pdf',150)
+        with self.assertRaisesRegex(ConversionError,'200'):convert(self.many('Combine → PDF',big,big))
+        with self.assertRaisesRegex(ConversionError,'200'):convert(self.many('Combine → DOCX',big,big))
+    def test_separate_routes_follow_each_file(self):
+        self.assertTrue(convert(self.job('Files → PDF',self.text('x')))[0].endswith('note-converted.pdf'))
+        self.assertTrue(convert(self.job('Files → PDF',self.png()))[0].endswith('in-converted.pdf'))
+        self.assertEqual(convert(self.job('Files → PDF',self.pdf())),[],'already a PDF: nothing to make')
+        with zipfile.ZipFile(convert(self.job('Files → DOCX',self.text('hi there')))[0]) as z:self.assertIn('hi there',z.read('word/document.xml').decode())
+        with self.assertRaises(ConversionError):convert(self.many('Files → PDF',self.png(),self.text('x')))
+
 if __name__=='__main__':unittest.main()

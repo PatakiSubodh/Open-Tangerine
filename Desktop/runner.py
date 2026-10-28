@@ -33,8 +33,8 @@ def stop(proc):
 
 def run_job(job,cancel=None,timeout=None,command=None,memory_limit=WORKER_MEMORY,info=None):
     """Run one job in a disposable worker. `info`, if given, receives `capped` (was the memory limit applied) and `peak_memory` (bytes, Windows only)."""
-    # Editing tools (video joins, compression) and OCR of a long PDF legitimately run longer than a conversion.
-    if timeout is None: timeout=1800 if str(job.get('target','')).startswith('tool:') else 960 if str(job.get('target','')).startswith('OCR') else 180
+    # Editing tools (video joins, compression) and combining many files legitimately run longer than a conversion.
+    if timeout is None: timeout=1800 if str(job.get('target','')).startswith(('tool:','Combine')) else 960 if str(job.get('target','')).startswith('OCR') else 180
     with ExitStack() as cleanup:
         job=dict(job)
         # Parent-owned staging: removed here even when the worker is killed mid-job.

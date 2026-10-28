@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory() as folder:
  else:ocr=Path(folder)/'fake-tesseract';ocr.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"'+chr(10));ocr.chmod(0o755)
  assert 'packaged OCR ok' in Path(worker({'paths':[str(pdf)],'target':'OCR → Text','output':folder,'tesseract':str(ocr)})[0]).read_text(encoding='utf8')
  from pypdf import PdfReader
- # AVIF encoder, A4 documents, pdfium page rendering, DOCX writer, text layout.
+ # Phase 1-4 pieces: AVIF encoder, A4 documents, pdfium page rendering, DOCX writer, text layout.
  with Image.open(worker({'paths':[str(p)],'target':'AVIF','output':folder})[0]) as im:assert im.size==(20,20)
  txt=Path(folder)/'note.txt';txt.write_text('hello world')
  page=PdfReader(worker({'paths':[str(txt)],'target':'Text → PDF','output':folder})[0]).pages[0];assert round(float(page.mediabox.width))==595 and round(float(page.mediabox.height))==842
@@ -47,7 +47,11 @@ with tempfile.TemporaryDirectory() as folder:
  assert len(PdfReader(merged).pages)==2
  collage=worker({'paths':[str(p),str(p)],'target':'tool:collage','output':folder,'params':{'columns':2,'cell':100}})[0]
  with Image.open(collage) as im:assert im.size[0]>200
-print('PASS: packaged GUI launch plus PNG, SVG, HEIC, AVIF, PDF-render/OCR, document and editing-tool worker jobs')
+ # Separate files to one file: every page lands on A4 whatever its source size.
+ combined=PdfReader(worker({'paths':[str(pdf),str(p),str(txt)],'target':'Combine → PDF','output':folder})[0]).pages
+ assert all(round(float(x.mediabox.width))==595 and round(float(x.mediabox.height))==842 for x in combined) and len(combined)>=3
+ with zipfile.ZipFile(worker({'paths':[str(p),str(txt)],'target':'Combine → DOCX','output':folder})[0]) as z:assert b'w:type="page"' in z.read('word/document.xml')
+print('PASS: packaged GUI launch plus PNG, SVG, HEIC, PDF-render/OCR, combine-to-one-file and editing-tool worker jobs')
 
 # Exercise the FFmpeg subprocess under the packaged worker's Linux resource limits.
 import shutil

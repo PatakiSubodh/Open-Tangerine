@@ -45,6 +45,17 @@ class UITests(unittest.TestCase):
         w=Window(enable_wheel=True);self.assertIsNotNone(w.wheel);self.assertFalse(hasattr(w,"wheel_box"))
         w.show();self.app.processEvents();w.quit_app();self.assertFalse(w.wheel.watcher.timer.isActive())
 
+    def test_one_file_choice_appears_for_several_files_and_runs_combined(self):
+        w=Window()
+        with tempfile.TemporaryDirectory() as d:
+            a,b=Path(d)/'a.png',Path(d)/'b.txt';Image.new('RGB',(8,8)).save(a);b.write_text('hi');w.add_paths([str(a)])
+            w.target.setCurrentText('Image → PDF');self.assertTrue(w.combine.isHidden(),'one file: nothing to combine')
+            w.add_paths([str(b)]);w.target.setCurrentText('Files → PDF');self.assertFalse(w.combine.isHidden());self.assertEqual(w.combine.currentText(),'Separate files')
+            self.assertEqual(w.chosen_target(),'Files → PDF');w.combine.setCurrentIndex(1);self.assertEqual(w.chosen_target(),'Combine → PDF');self.assertIn('into one PDF',w.convert.text())
+            w.output=d;w.start();w.batch.wait(60000);self.app.processEvents()
+            self.assertEqual(len(w.outputs),1);self.assertTrue(Path(w.outputs[0]).name.startswith('combined'));Path(w.outputs[0]).unlink();self.assertTrue(all('✓' in w.list.item(i).text() for i in range(2)))
+            w.target.setCurrentText('SHA-256');self.assertTrue(w.combine.isHidden());self.assertEqual(w.chosen_target(),'SHA-256')
+        w.close()
 
 class RegressionUITests(unittest.TestCase):
     @classmethod

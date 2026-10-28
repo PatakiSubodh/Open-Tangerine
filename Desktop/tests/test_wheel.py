@@ -24,8 +24,11 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(targets_for(['a.docx']), ['Office → PDF', 'SHA-256']);self.assertEqual(targets_for(['a.srt'])[0], 'SRT → VTT');self.assertEqual(targets_for(['a.vtt'])[0], 'VTT → SRT')
         self.assertIn('MP3', targets_for(['a.mp4']));self.assertEqual(targets_for(['mystery.xyz']), ['SHA-256'])
     def test_mixed_uses_common_operations(self):
-        self.assertEqual(targets_for(['a.png', 'b.pdf']), ['OCR → Text', 'OCR → Searchable PDF', 'SHA-256']);self.assertEqual(targets_for(['a.png', 'b.docx']), ['SHA-256']);self.assertEqual(targets_for([]), [])
-        self.assertEqual(targets_for(['a.mp3', 'b.png']), ['SHA-256'])
+        self.assertEqual(targets_for(['a.png', 'b.pdf']), ['Files → PDF', 'Files → DOCX', 'OCR → Text', 'OCR → Searchable PDF', 'SHA-256']);self.assertEqual(targets_for(['a.png', 'b.docx']), ['Files → PDF', 'SHA-256']);self.assertEqual(targets_for([]), [])
+        self.assertEqual(targets_for(['a.mp3', 'b.png']), ['SHA-256']);self.assertNotIn('Files → PDF', targets_for(['a.pdf', 'b.pdf']));self.assertNotIn('Files → PDF', targets_for(['a.png', 'b.jpg']))
+    def test_combine_is_offered_only_for_several_files(self):
+        self.assertEqual(wheel.combine_target('Image → PDF', ['a.png', 'b.png']), 'Combine → PDF');self.assertEqual(wheel.combine_target('PDF → DOCX', ['a.pdf', 'b.pdf']), 'Combine → DOCX')
+        self.assertIsNone(wheel.combine_target('Image → PDF', ['a.png']));self.assertIsNone(wheel.combine_target('JPEG', ['a.png', 'b.png']));self.assertIsNone(wheel.combine_target('Merge PDFs', ['a.pdf', 'b.pdf']))
 
 class ModeItemTests(unittest.TestCase):
     def test_modifier_mapping(self):
@@ -140,6 +143,20 @@ class ModeTabTests(OverlayBase):
     def test_picker_escape_and_outside_click_dismiss(self):
         self.overlay.present(QPoint(400, 400), 'convert', [str(self.png)], interactive=True);QTest.keyClick(self.overlay, Qt.Key_Escape);self.assertFalse(self.overlay.isVisible())
         self.overlay.present(QPoint(400, 400), 'convert', [str(self.png)], interactive=True);QTest.mouseClick(self.overlay, Qt.LeftButton, Qt.NoModifier, QPoint(4, 4));self.assertFalse(self.overlay.isVisible())
+    def at_radius(self, index, r):
+        n = len(self.overlay.items);mid = math.radians(90 - (index + .5) * 360 / n);c = self.overlay.SIZE / 2
+        return (c + r * math.cos(mid), c - r * math.sin(mid))
+    def test_pdf_tile_splits_into_separate_and_one_file_while_dragging_several(self):
+        b = self.dir / 'b.png';Image.new('RGB', (8, 8)).save(b);self.urls(self.png, b);self.enter();o = self.overlay
+        got = [];o.chosen.connect(lambda paths, kind, key: got.append(key));i = [x.key for x in o.items].index('Image → PDF');outer, inner = o.OUTER - 12, o.INNER + 16
+        self.move_to(self.at_radius(i, outer));self.assertEqual((o.hover, o.hover_part), (i, 'one'));self.assertIn('One file', o.accessibleDescription());self.assertFalse(o.grab().isNull())
+        self.move_to(self.at_radius(i, inner));self.assertEqual(o.hover_part, 'separate');self.assertFalse(o.grab().isNull())
+        j = [x.key for x in o.items].index('JPEG');self.assertTrue(o.splits(i));self.assertFalse(o.splits(j))
+        self.drop_at(self.at_radius(i, outer));self.enter();self.drop_at(self.at_radius(i, inner));self.enter();self.drop_at(self.at_radius(j, outer))
+        self.assertEqual(got, ['Combine → PDF', 'Image → PDF', 'JPEG'])
+    def test_single_file_tiles_never_split(self):
+        self.urls(self.png);self.enter();o = self.overlay;i = [x.key for x in o.items].index('Image → PDF');got = [];o.chosen.connect(lambda paths, kind, key: got.append(key))
+        self.move_to(self.at_radius(i, o.OUTER - 12));self.assertIsNone(o.hover_part);self.drop_at(self.at_radius(i, o.OUTER - 12));self.assertEqual(got, ['Image → PDF'])
     def test_non_interactive_wheel_ignores_stray_clicks(self):
         got = [];self.overlay.chosen.connect(lambda *a: got.append(a));self.overlay.present(QPoint(400, 400));QTest.mouseClick(self.overlay, Qt.LeftButton, Qt.NoModifier, QPoint(240, 100));self.assertEqual(got, []);self.assertTrue(self.overlay.isVisible())
 
@@ -172,6 +189,11 @@ class ControllerTests(unittest.TestCase):
         src = self.dir / 'photo.png';Image.new('RGB', (16, 16), 'orange').save(src)
         self.c.dispatch([str(src)], 'convert', 'JPEG');self.assertEqual(self.c.notch.kind, 'info');self.wait()
         self.assertEqual(self.c.notch.kind, 'ok');self.assertTrue((self.dir / 'photo-converted.jpg').is_file());self.assertTrue(src.is_file())
+    def test_one_file_choice_from_the_wheel_saves_one_pdf(self):
+        a, b = self.dir / 'a.png', self.dir / 'b.png'
+        for f in (a, b): Image.new('RGB', (16, 16), 'orange').save(f)
+        self.c.dispatch([str(a), str(b)], 'convert', 'Combine → PDF');self.wait()
+        self.assertEqual(self.c.notch.kind, 'ok');self.assertEqual(self.c.notch.text, 'Combined PDF saved');self.assertEqual([f.name for f in self.dir.glob('*.pdf')], ['combined.pdf'])
     def test_failure_is_reported_in_notch_without_losing_good_files(self):
         good = self.dir / 'good.png';Image.new('RGB', (16, 16)).save(good);bad = self.dir / 'bad.png';bad.write_bytes(b'broken')
         self.c.convert([str(bad), str(good)], 'JPEG');self.wait()

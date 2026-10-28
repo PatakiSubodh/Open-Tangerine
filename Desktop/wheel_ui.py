@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QEvent, QPoint, QPointF, QRectF, QTimer, QUrl, QPropertyAnimation, QEasingCurve, QElapsedTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QDesktopServices, QFont, QFontMetricsF, QGuiApplication, QLinearGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QRadialGradient, QTextLayout, QTextOption
 from PySide6.QtWidgets import QWidget
-from wheelmodel import SLOTS, MODES, MODE_TITLES, MODE_KEYS, EMPTY, PROMPT, items_for, default_items
+from wheelmodel import SLOTS, MODES, MODE_TITLES, MODE_KEYS, EMPTY, PROMPT, items_for, default_items, combine_target
 
 def system_dark():
     """True when the OS app theme is dark (Qt's colour scheme, falling back to the Windows registry); dark when unknown."""
@@ -131,7 +131,7 @@ class WheelOverlay(QWidget):
     def __init__(self):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.NoDropShadowWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground);self.setAttribute(Qt.WA_ShowWithoutActivating);self.setMouseTracking(True)
-        self.setAcceptDrops(True);self.setFixedSize(self.SIZE, self.HEIGHT);self.paths = [];self.mode = 'convert';self.items = default_items();self.hover = -1;self.hover_tab = -1
+        self.setAcceptDrops(True);self.setFixedSize(self.SIZE, self.HEIGHT);self.paths = [];self.mode = 'convert';self.items = default_items();self.hover = -1;self.hover_tab = -1;self.hover_part = None
         self.interactive = False;self.focusless = True;self.setAccessibleName('Open Tangerine drag wheel')
         self.theme = Theme();self.look = 'light';self.wedges = {};self.open = 1.0;self.lift = [0.0] * SLOTS;self.clock = QElapsedTimer();self.last = 0
         self.hide_timer = QTimer(self);self.hide_timer.setSingleShot(True);self.hide_timer.timeout.connect(self.dismiss)
@@ -139,7 +139,7 @@ class WheelOverlay(QWidget):
     # --- lifecycle ------------------------------------------------------------------
     def present(self, center, mode='convert', paths=None, interactive=False):
         """Show the wheel with the ring centred on `center`. With `paths` and interactive=True it is a click-to-pick menu."""
-        self.theme.refresh();self.hide_timer.stop();self.paths = list(paths or []);self.mode = mode;self.interactive = interactive;self.hover = -1;self.hover_tab = -1;self.lift = [0.0] * SLOTS
+        self.theme.refresh();self.hide_timer.stop();self.paths = list(paths or []);self.mode = mode;self.interactive = interactive;self.hover = -1;self.hover_tab = -1;self.hover_part = None;self.lift = [0.0] * SLOTS
         self.items = items_for(mode, self.paths) if self.paths else (default_items() if mode == 'convert' else [])
         want_focusless = not interactive
         if want_focusless != self.focusless: self.setWindowFlag(Qt.WindowDoesNotAcceptFocus, want_focusless);self.focusless = want_focusless
@@ -180,6 +180,17 @@ class WheelOverlay(QWidget):
     def tile_centre(self, i, n):
         angle = math.radians(90 if n == 1 else 90 - (i + .5) * 360 / n);r = self.ring_radius();c = self.SIZE / 2
         return QPointF(c + r * math.cos(angle), c - r * math.sin(angle))
+    def split_radius(self): return (self.INNER + 6 + self.OUTER) / 2
+    def splits(self, i):
+        """Does tile i offer Separate / One file? Only PDF and Word conversions of several files."""
+        return 0 <= i < len(self.items) and self.items[i].kind == 'convert' and bool(combine_target(self.items[i].key, self.paths))
+    def part_at(self, pos, i):
+        """'one' on the outer half of a split tile, 'separate' on the inner half, None for an ordinary tile."""
+        if not self.splits(i): return None
+        c = self.SIZE / 2;return 'one' if math.hypot(pos.x() - c, pos.y() - c) >= self.split_radius() else 'separate'
+    def key_at(self, pos, i):
+        key = self.items[i].key
+        return combine_target(key, self.paths) if self.part_at(pos, i) == 'one' else key
     def tab_rects(self):
         w, h, gap = 122, 30, 10;x0 = (self.SIZE - (3 * w + 2 * gap)) / 2;y = self.SIZE / 2 + self.OUTER + 18
         return [QRectF(x0 + i * (w + gap), y, w, h) for i in range(3)]
@@ -197,11 +208,12 @@ class WheelOverlay(QWidget):
         # Only a Copy answer is ever given.
         if event.possibleActions() & Qt.CopyAction: event.setDropAction(Qt.CopyAction);event.accept();return True
         event.ignore();return False
-    def set_hover(self, index, tab=-1):
-        if index == self.hover and tab == self.hover_tab: return
-        self.hover = index;self.hover_tab = tab;self.restart_clock();self.describe();self.update()
+    def set_hover(self, index, tab=-1, part=None):
+        if index == self.hover and tab == self.hover_tab and part == self.hover_part: return
+        self.hover = index;self.hover_tab = tab;self.hover_part = part;self.restart_clock();self.describe();self.update()
     def hover_label(self):
-        item = self.items[self.hover];return item.label if item.kind == 'convert' else item.label.upper()
+        item = self.items[self.hover];label = item.label if item.kind == 'convert' else item.label.upper()
+        return label + {'one': ' · One file', 'separate': ' · Separate files'}.get(self.hover_part, '')
     def describe(self):
         """Accessible description: the mode, and the tile under the pointer if any."""
         hot = self.hover_label() if 0 <= self.hover < len(self.items) else ''
@@ -209,7 +221,7 @@ class WheelOverlay(QWidget):
     def point_changed(self, pos):
         tab = self.tab_at(pos)
         if tab >= 0: self.set_mode(MODES[tab]);self.set_hover(-1, tab)
-        else: self.set_hover(self.segment_at(pos))
+        else: index = self.segment_at(pos);self.set_hover(index, part=self.part_at(pos, index))
     def dragEnterEvent(self, event):
         files = self.local_files(event.mimeData())
         if not files or not self.accept_copy(event): event.ignore();return
@@ -221,7 +233,7 @@ class WheelOverlay(QWidget):
     def dropEvent(self, event):
         pos = event.position().toPoint();index = self.segment_at(pos);files = self.paths
         if index < 0 or not files or not self.accept_copy(event): event.ignore();self.dismiss();return
-        item = self.items[index];self.dismiss();self.chosen.emit(list(files), item.kind, item.key)
+        item = self.items[index];key = self.key_at(pos, index);self.dismiss();self.chosen.emit(list(files), item.kind, key)
     # --- click-to-pick (tray and window menus) ---------------------------------------
     def mouseMoveEvent(self, event):
         if self.interactive: self.point_changed(event.position().toPoint())
@@ -230,7 +242,7 @@ class WheelOverlay(QWidget):
         pos = event.position().toPoint();tab = self.tab_at(pos)
         if tab >= 0: self.set_mode(MODES[tab]);return
         index = self.segment_at(pos)
-        if index >= 0: item = self.items[index];files = list(self.paths);self.dismiss();self.chosen.emit(files, item.kind, item.key)
+        if index >= 0: item = self.items[index];key = self.key_at(pos, index);files = list(self.paths);self.dismiss();self.chosen.emit(files, item.kind, key)
         else: self.dismiss()
     def keyPressEvent(self, event):
         if self.interactive and event.key() == Qt.Key_Escape: self.dismiss()
@@ -270,12 +282,26 @@ class WheelOverlay(QWidget):
             p.translate(c);p.scale(grow_in, grow_in);p.translate(-c);p.translate(cen);p.scale(1 + .06 * lift, 1 + .06 * lift);p.translate(-cen)
             if L.sheen: p.save();p.translate(0, 3);p.setBrush(QColor(12, 33, 48, 18));p.setPen(QPen(QColor(12, 33, 48, 12), 5));p.drawPath(shape);p.restore()
             p.setBrush(glass(top, bottom, L.pane));p.setPen(QPen(L.pane_edge, 1.1));p.drawPath(shape)
-            if lift > .01: p.setBrush(glass(top, bottom, L.hot, lift));p.setPen(Qt.NoPen);p.drawPath(shape)
+            split = self.splits(i);halves = None
+            if split:
+                rim = QPainterPath();rs = self.split_radius();rim.addEllipse(c, rs, rs);halves = {'separate': shape.intersected(rim), 'one': shape.subtracted(rim)}
+            # A split tile lights only the half under the pointer.
+            hot_shape = halves[self.hover_part] if split and i == self.hover and self.hover_part else shape
+            if lift > .01: p.setBrush(glass(top, bottom, L.hot, lift));p.setPen(Qt.NoPen);p.drawPath(hot_shape)
             if L.sheen:
                 p.save();p.setClipPath(shape);sheen = QRadialGradient(c.x() - R * .35, c.y() - R * .9, R * 1.5)
                 sheen.setColorAt(0, QColor(255, 255, 255, 95));sheen.setColorAt(1, QColor(255, 255, 255, 0));p.fillRect(shape.boundingRect(), sheen);p.restore()
             width = min(R - self.INNER - 34, 2 * rmid * math.sin(math.pi / max(n, 2)) * .7);ink = L.ink_hot if lift > .5 else L.ink;p.setPen(ink)
-            if item.kind == 'convert':
+            if split:
+                # A faint seam marks the two halves; hovering names them.
+                p.save();p.setClipPath(shape);p.setPen(QPen(L.pane_edge if i == self.hover else L.muted, 1.2, Qt.SolidLine if i == self.hover else Qt.DotLine));p.setBrush(Qt.NoBrush)
+                p.drawEllipse(c, self.split_radius(), self.split_radius());p.restore();p.setPen(ink)
+            if split and i == self.hover and lift > .05:
+                # Hovered with several files: name both halves so the drop can go straight to the right one.
+                for part, text, r in (('separate', 'Separate', (self.INNER + 6 + self.split_radius()) / 2), ('one', 'One file', (self.split_radius() + R) / 2)):
+                    at = QPointF(c.x() + r * math.cos(angle), c.y() - r * math.sin(angle));w = max(28.0, min(R - self.INNER - 20, 2 * r * math.sin(math.pi / max(n, 2)) * .8))
+                    p.setPen(L.ink_hot if part == self.hover_part and lift > .5 else L.ink);p.setFont(fit_font(text, w, 9, QFont.Bold));p.drawText(QRectF(at.x() - w / 2, at.y() - 10, w, 20), Qt.AlignCenter, text)
+            elif item.kind == 'convert':
                 p.setFont(fit_font(item.label, width, 11, QFont.Bold));p.drawText(QRectF(cen.x() - width / 2, cen.y() - 12, width, 24), Qt.AlignCenter, item.label)
             else:
                 draw_icon(p, item.key, QRectF(cen.x() - 9, cen.y() - 20, 18, 18), ink)

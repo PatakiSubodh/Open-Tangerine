@@ -1,7 +1,8 @@
-"""Sequential batch runner for the main window."""
+"""Sequential batch runner shared by the main window and the Shift wheel."""
 import threading
 from PySide6.QtCore import QThread, Signal
 from runner import run_job, Cancelled
+from engine import COMBINED_TARGETS
 
 class Batch(QThread):
     result=Signal(int,str,list)
@@ -9,11 +10,10 @@ class Batch(QThread):
     def __init__(self,paths,target,options):
         super().__init__();self.paths=paths;self.target=target;self.options=options;self.cancel=threading.Event()
     def combined(self):
-        """One job for the whole list (Merge PDFs, and tools that join files) instead of one per file."""
         if self.target.startswith('tool:'):
             import toolops
             return toolops.TOOLS[self.target[5:]].combined
-        return self.target=='Merge PDFs'
+        return self.target in COMBINED_TARGETS
     def run(self):
         groups=[self.paths] if self.combined() else [[p] for p in self.paths]
         for i,paths in enumerate(groups):

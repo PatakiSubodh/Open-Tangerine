@@ -201,6 +201,29 @@ def image_to_docx(p, work, stage): write_docx(image_blocks(p, work), stage)
 
 def pdf_to_docx(p, work, stage): write_docx(pdf_blocks(p, work), stage)
 
+def text_blocks(p): return [('p', ln) for ln in read_text(p).split('\n')]
+
+def file_blocks(p, work):
+    """DOCX blocks for an image, PDF or text file; images it renders are written into `work`."""
+    suffix = p.suffix.lower()
+    if suffix in IMAGE_INPUTS: return image_blocks(p, work)
+    if suffix == '.pdf': return pdf_blocks(p, work)
+    if suffix in TEXT_INPUTS: return text_blocks(p)
+    raise ConversionError('Only images, PDFs and text files can become a Word file.')
+
+def combine_docx(paths, work, stage):
+    """One Word file from every input in list order, each starting on a new page."""
+    blocks = [];pages = 0
+    for i, p in enumerate(paths):
+        part = Path(work) / f'part-{i}';part.mkdir()
+        try:
+            if p.suffix.lower() == '.pdf': pages += len(read_pdf(p).pages)
+            if pages > MAX_PAGES: raise ConversionError(f'The combined file cannot exceed {MAX_PAGES} PDF pages.')
+            more = file_blocks(p, part)
+        except ConversionError as e: raise ConversionError(f'{p.name}: {e}') from e
+        blocks += ([('br',)] if blocks else []) + more
+    write_docx(blocks, stage)
+
 def pdf_blocks(p, work):
     import pypdfium2 as pdfium
     pdf = read_pdf(p);doc = pdfium.PdfDocument(str(p));blocks = []
@@ -228,6 +251,7 @@ def dispatch(target, p, work, stage, folder, stem):
         if suffix != '.pdf': raise ConversionError('Select a PDF file.')
         if target == 'PDF → DOCX': pdf_to_docx(p, work, stage);return [publish(stage, folder, stem, 'docx')]
         return pdf_to_images(p, work, folder, 'PNG' if target.endswith('PNG') else 'JPEG')
+    if target == 'Files → DOCX': write_docx(file_blocks(p, work), stage);return [publish(stage, folder, stem, 'docx')]
     if target == 'Subtitle → Text':
         if suffix not in ('.srt', '.vtt'): raise ConversionError('Select an SRT or VTT file.')
         convert_text_subtitle(p, stage, 'txt');return [publish(stage, folder, stem, 'txt')]
