@@ -125,6 +125,20 @@ class MediaRouteTests(Base):
         big=self.make(['-f','lavfi','-i','testsrc=size=1280x720:rate=10:duration=1','-pix_fmt','yuv420p'],'big.mp4')
         with Image.open(self.run_to('GIF',big)) as im:self.assertEqual(im.size,(480,270))
 
+class WheelTargetTests(unittest.TestCase):
+    def test_wheel_targets(self):
+        from wheelmodel import targets_for
+        self.assertIn('AVIF',targets_for(['a.png']));self.assertIn('Image → DOCX',targets_for(['a.png']))
+        self.assertEqual(targets_for(['a.pdf','b.pdf'])[:4],['PDF → Text','PDF → PNG','PDF → JPEG','PDF → DOCX'])
+        self.assertIn('Text → PDF',targets_for(['a.txt','b.md']));self.assertIn('Subtitle → Text',targets_for(['a.srt']))
+        v=targets_for(['a.mp4']);self.assertIn('GIF',v);self.assertNotIn('OPUS',v);a=targets_for(['a.opus','b.wma']);self.assertIn('AIFF',a);self.assertNotIn('MP4',a)
+        self.assertEqual(targets_for(['a.gif'])[:2],['MP4','WEBM'])
+    def test_every_wheel_target_is_a_real_operation_and_fits(self):
+        from wheelmodel import targets_for, SLOTS
+        for sample in ('a.png','a.pdf','a.txt','a.srt','a.vtt','a.mp4','a.mp3','a.gif','a.docx'):
+            t=targets_for([sample]);self.assertLessEqual(len(t),SLOTS)
+            for x in t:self.assertTrue(x in OPERATIONS,x)
+
 class OperationTests(unittest.TestCase):
     def test_all_new_operations_listed(self):
         for x in ('AVIF','GIF','AVI','WMV','M4A','OPUS','AIFF','WMA','PDF → PNG','PDF → JPEG','PDF → DOCX','Image → DOCX','Text → PDF','Text → SRT','Subtitle → Text','MOV','MKV'):self.assertIn(x,OPERATIONS)

@@ -27,6 +27,10 @@ MEDIA_OUTPUTS = {'MP4': ('mp4', ['-c:v','libx264','-preset','fast','-crf','23','
                'OPUS': ('opus',['-vn','-c:a','libopus','-b:a','128k']),
                'AIFF': ('aiff',['-vn','-c:a','pcm_s16be']),
                'WMA': ('wma',['-vn','-c:a','wmav2','-b:a','192k'],'asf')}
+VIDEO_TARGETS = ['MP4', 'WEBM', 'MOV', 'MKV', 'GIF', 'AVI', 'WMV', 'MP3', 'WAV', 'FLAC', 'OGG']
+AUDIO_TARGETS = ['MP3', 'WAV', 'FLAC', 'OGG', 'M4A', 'OPUS', 'AIFF', 'WMA']
+GIF_TARGETS = ['MP4', 'WEBM', 'MOV', 'MKV', 'AVI', 'WMV']
+AUDIO_INPUTS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.opus', '.aiff', '.aif'}
 TEXT_INPUTS = {'.txt', '.md', '.log', '.text'}
 DOC_OPERATIONS = ['Image → DOCX', 'PDF → PNG', 'PDF → JPEG', 'PDF → DOCX', 'Text → PDF', 'Text → PNG', 'Text → JPEG', 'Text → SRT', 'Text → VTT', 'Subtitle → Text']
 PAGE_PIXELS = {'a4': (1240, 1754)}          # 150 dpi
