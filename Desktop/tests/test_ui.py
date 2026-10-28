@@ -15,6 +15,16 @@ class UITests(unittest.TestCase):
         w.close()
     def test_window_and_options(self):
         w=Window(global_wheel=False);w.show();self.app.processEvents();w.target.setCurrentText('Merge PDFs');self.assertFalse(w.width.isEnabled());w.target.setCurrentText('JPEG');self.assertTrue(w.width.isEnabled());w.close()
+    def test_new_operations_are_listed_and_options_follow_image_targets(self):
+        w=Window(global_wheel=False)
+        for name in ('HEIC','OCR → Text','Office → PDF'):self.assertGreaterEqual(w.target.findText(name),0,name)
+        w.target.setCurrentText('HEIC');self.assertTrue(w.width.isEnabled());self.assertTrue(w.lang.isHidden())
+        w.target.setCurrentText('OCR → Text');self.assertFalse(w.width.isEnabled());self.assertFalse(w.lang.isHidden());w.close()
+    def test_tools_and_language_are_passed_to_batch(self):
+        w=Window(global_wheel=False);w.settings.setValue('tesseract','C:/t/tesseract.exe');w.lang.setText('eng+deu')
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'a.png';Image.new('RGB',(8,8)).save(p);w.add_paths([str(p)]);w.start();opts=w.batch.options;w.batch.cancel.set();w.batch.wait(20000)
+        self.assertEqual(opts['tesseract'],'C:/t/tesseract.exe');self.assertEqual(opts['ocr_lang'],'eng+deu');self.assertIn('soffice',opts);w.settings.remove('tesseract');w.close()
 
 class RegressionUITests(unittest.TestCase):
     @classmethod
