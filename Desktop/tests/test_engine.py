@@ -9,7 +9,7 @@ from pypdf import PdfReader, PdfWriter
 
 class ConversionTests(unittest.TestCase):
     def setUp(self):
-        # Tests must not pick up helpers (FFmpeg, Tesseract, LibreOffice) installed on the developer's machine.
+        # Tests must not pick up helper programs installed on the developer's machine.
         patcher=mock.patch('engine.find_tool',return_value=None);patcher.start();self.addCleanup(patcher.stop)
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name).resolve();self.src=self.root/'源 image ; $danger.png';Image.new('RGBA',(32,24),(255,0,0,128)).save(self.src)
     def tearDown(self):self.tmp.cleanup()
@@ -181,7 +181,7 @@ class ConversionTests(unittest.TestCase):
         self.assertTrue(out.name.endswith('-searchable.pdf'));self.assertEqual(len(PdfReader(str(out)).pages),2)
     def test_tool_detection_ignores_relative_path_entries(self):
         import engine
-        with mock.patch.dict(os.environ,{'PATH':'relative-dir'}),mock.patch('engine._tool_dirs',return_value=[]):self.assertIsNone(engine.find_tool('tesseract'))
+        with mock.patch.dict(os.environ,{'PATH':'relative-dir'}),mock.patch('engine._tool_dirs',return_value=[]):self.assertIsNone(engine.find_tool('ffmpeg'))
     def test_ocr_no_text(self):
         ocr=self.tool('fake-tesseract',"import sys\nopen(sys.argv[2]+'.txt','w').write(' \\n')\n")
         with self.assertRaisesRegex(ConversionError,'No text'):convert(self.job('OCR → Text',tesseract=ocr))

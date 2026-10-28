@@ -3,10 +3,6 @@
 This is an early cross-platform desktop edition, not a port of every Mac feature.
 No account, telemetry, uploads, administrator service or automatic downloads.
 
-## how to run:
-`cd Desktop && .\.venv\Scripts\python.exe app.py`
-
-
 ## Install
 
 - **Windows 10/11 x64:** extract the entire Windows ZIP into a local folder. Run `OpenTangerine.exe` inside it. Keep `_internal` alongside it. This trial is unsigned; Windows may warn about an unknown publisher. Do not disable Defender or SmartScreen globally. Do not run a file flagged as malware; report the exact warning.

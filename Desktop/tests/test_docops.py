@@ -138,6 +138,8 @@ class WheelTargetTests(unittest.TestCase):
         for sample in ('a.png','a.pdf','a.txt','a.srt','a.vtt','a.mp4','a.mp3','a.gif','a.docx'):
             t=targets_for([sample]);self.assertLessEqual(len(t),SLOTS)
             for x in t:self.assertTrue(x in OPERATIONS,x)
+
+class OperationTests(unittest.TestCase):
     def test_all_new_operations_listed(self):
         for x in ('AVIF','GIF','AVI','WMV','M4A','OPUS','AIFF','WMA','PDF → PNG','PDF → JPEG','PDF → DOCX','Image → DOCX','Text → PDF','Text → SRT','Subtitle → Text','MOV','MKV'):self.assertIn(x,OPERATIONS)
 
