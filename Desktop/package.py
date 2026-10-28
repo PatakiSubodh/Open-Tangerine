@@ -10,7 +10,7 @@ with Image.open(r/'icon.png') as im:im.save(ico,sizes=[(16,16),(24,24),(32,32),(
 if os.name=='nt':
  subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','windows.spec'],check=True)
 else:
- subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--windowed','--name','OpenTangerine','--icon',str(ico),'--add-data','icon.png:.','--collect-all','pypdf','--collect-all','pillow_heif','--collect-all','pypdfium2','--hidden-import','PySide6.QtSvg','--hidden-import','docops','app.py'],check=True)
+ subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onedir','--windowed','--name','OpenTangerine','--icon',str(ico),'--add-data','icon.png:.','--collect-all','pypdf','--collect-all','pillow_heif','--collect-all','pypdfium2','--hidden-import','PySide6.QtSvg','--hidden-import','toolwin','--hidden-import','toolops','--hidden-import','docops','--hidden-import','mediaui','app.py'],check=True)
 dest=r/'dist/OpenTangerine';lic=dest/'licenses';lic.mkdir(exist_ok=True)
 shutil.copyfile(r.parent/'LICENSE',lic/'Open-Tangerine-GPL-3.0.txt')
 shutil.copyfile(r/'README.md',dest/'START-HERE.md')

@@ -1,7 +1,7 @@
 # PyInstaller: GUI entry point without a console, plus a piped conversion worker.
 from PyInstaller.utils.hooks import collect_all
 
-datas, binaries, hiddenimports = [], [], ['PySide6.QtSvg', 'docops']
+datas, binaries, hiddenimports = [], [], ['PySide6.QtSvg', 'docops', 'toolops', 'toolwin', 'mediaui']
 for package in ('pypdf', 'pillow_heif', 'pypdfium2'):
     d, b, h = collect_all(package)
     datas += d; binaries += b; hiddenimports += h
