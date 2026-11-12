@@ -1,6 +1,7 @@
 """Tray lifecycle for a Windows desktop session with no main window."""
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QStyle, QPushButton
+import screenfit
 
 
 class BackgroundController(QObject):
@@ -37,7 +38,7 @@ class BackgroundController(QObject):
         self.tray.show()
         button = QPushButton('Run in background', window)
         button.clicked.connect(window.hide)
-        window.centralWidget().layout().addWidget(button)
+        screenfit.content(window).layout().addWidget(button)
         QApplication.instance().setQuitOnLastWindowClosed(False)
 
     def activated(self, reason):

@@ -12,7 +12,8 @@ class GlassWheel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(320, 360)
+        # Paints scaled to its box (380:425), so it may shrink with the window instead of pushing rows apart.
+        self.setMinimumSize(200, 224)
         self.setAccessibleName('Glass conversion wheel')
         self.current = 'PNG'
         self.buttons = []

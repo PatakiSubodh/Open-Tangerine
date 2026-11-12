@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QUrl, QSettings
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QFileDialog,QComboBox,QListWidget,QProgressBar,QSpinBox,QMessageBox,QAbstractItemView,QCheckBox)
+import screenfit
 from engine import VERSION, OPERATIONS, source_file
 from runner import run_job, Cancelled
 from glass_wheel import GlassWheel, WHEEL_STYLE
@@ -53,10 +54,10 @@ class Window(QMainWindow):
         super().__init__();self.paths=[];self.outputs=[];self.batch=None
         self.background=None;self.quitting=False;self.batch_errors=[]
         self.settings=QSettings('Sintax Error Private Limited','Open Tangerine Desktop')
-        self.setWindowTitle('Open Tangerine · Windows / Linux trial');self.resize(800,690)
+        self.setWindowTitle('Open Tangerine · Windows / Linux trial')
         icon=Path(__file__).with_name('icon.png')
         if icon.exists():self.setWindowIcon(QIcon(str(icon)))
-        box=QWidget();self.setCentralWidget(box);layout=QVBoxLayout(box);layout.setContentsMargins(28,24,28,24);layout.setSpacing(12)
+        box=QWidget();self.setCentralWidget(screenfit.scrollable(box));layout=QVBoxLayout(box);layout.setContentsMargins(28,24,28,24);layout.setSpacing(12)
         title=QLabel('Open Tangerine');title.setStyleSheet('font-size:30px;font-weight:bold;color:#ff762b');layout.addWidget(title)
         layout.addWidget(QLabel('Drop your files. Choose an output. Keep working.'))
         note=QLabel('Local processing · Originals kept\n'+('Enable the optional wheel below. Drag files from Explorer/Desktop and hold Shift. Escape cancels.' if os.name=='nt' else 'Drop files into this window to convert.'));note.setWordWrap(True);layout.addWidget(note)
@@ -101,6 +102,7 @@ class Window(QMainWindow):
             row=QHBoxLayout();layout.addLayout(row);row.addWidget(QLabel('Wheel progress island'))
             self.island_style=QComboBox();self.island_style.addItems(STYLES);self.island_style.setAccessibleName('Wheel progress island style')
             self.island_style.setCurrentText(self.island.style_name);self.island_style.currentTextChanged.connect(self.set_island_style);row.addWidget(self.island_style,1)
+        screenfit.fit(self,800,690)
     def toggle_shift_wheel(self, enabled):
         self.settings.setValue('shiftWheel',enabled)
         self.shift_wheel.set_enabled(enabled)
